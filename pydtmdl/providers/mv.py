@@ -35,6 +35,10 @@ class MecklenburgVorpommernProvider(WCSProvider, DTMProvider):
     _tile_size = 1000
 
     def get_wcs_parameters(self, tile):
+        if not self.user_settings:
+            raise ValueError("User settings are required for this provider.")
+        if not self.user_settings.dataset:
+            raise ValueError("Dataset is required for this provider.")
         return {
             "identifier": [self.user_settings.dataset],
             "subsets": [("x", str(tile[1]), str(tile[3])), ("y", str(tile[0]), str(tile[2]))],

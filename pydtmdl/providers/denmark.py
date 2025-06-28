@@ -36,6 +36,8 @@ class DenmarkProvider(WCSProvider, DTMProvider):
     _tile_size = 1000
 
     def get_wcs_parameters(self, tile):
+        if not self.user_settings:
+            raise ValueError("User settings are required for this provider.")
         if not self.user_settings.token:
             raise ValueError("A token is required for this provider.")
 

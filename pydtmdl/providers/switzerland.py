@@ -49,6 +49,11 @@ class SwitzerlandProvider(DTMProvider):
         Returns:
             list: List of download URLs.
         """
+        if not self.user_settings:
+            raise ValueError("User settings are required for this provider.")
+        if not self.user_settings.resolution:
+            raise ValueError("Resolution is required for this provider.")
+
         urls = []
         try:
             bbox = self.get_bbox()

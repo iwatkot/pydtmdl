@@ -4,24 +4,21 @@ and specific settings for downloading and processing the data."""
 
 from __future__ import annotations
 
+import logging
 import os
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any, Type
+from typing import Any, Type
 from zipfile import ZipFile
 
 import numpy as np
 import osmnx as ox
 import rasterio
 import requests
-from maps4fs.logger import Logger
 from pydantic import BaseModel
 from rasterio.enums import Resampling
 from rasterio.merge import merge
 from rasterio.warp import calculate_default_transform, reproject
 from tqdm import tqdm
-
-if TYPE_CHECKING:
-    from maps4fs.generator.map import Map
 
 
 class DTMProviderSettings(BaseModel):
@@ -63,11 +60,10 @@ class DTMProvider(ABC):
     def __init__(
         self,
         coordinates: tuple[float, float],
-        user_settings: DTMProviderSettings | None,
         size: int,
-        directory: str,
-        logger: Logger,
-        map: Map,
+        user_settings: DTMProviderSettings | None = None,
+        directory: str = os.path.join(os.getcwd(), "tiles"),
+        logger: Any = logging.getLogger(__name__),
     ):
         self._coordinates = coordinates
         self._user_settings = user_settings
@@ -79,7 +75,6 @@ class DTMProvider(ABC):
         os.makedirs(self._tile_directory, exist_ok=True)
 
         self.logger = logger
-        self.map = map
 
     @classmethod
     def default_settings(cls) -> dict[str, dict[str, Any]]:
