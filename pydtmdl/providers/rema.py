@@ -14,7 +14,6 @@ class REMAProvider(DTMProvider):
     _region = "Global"
     _icon = "🌍"
     _resolution = 2.0
-    _is_community = True
 
     _extents = [(-53.5443873459092, -53.5443873459092, 179.99698443265999, -180)]
 

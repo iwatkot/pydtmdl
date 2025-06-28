@@ -51,7 +51,6 @@ class ScotlandProvider(DTMProvider):
     _icon = "🏴󠁧󠁢󠁳󠁣󠁴󠁿"
     _resolution = 1.0
     _settings = ScotlandProviderSettings
-    _is_community = True
     _instructions = (
         "Coverage for Scotland is very limited. "
         "Make sure to check the [coverage map](https://remotesensingdata.gov.scot/data#/map)."

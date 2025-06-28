@@ -36,8 +36,6 @@ class DTMProvider(ABC):
 
     _url: str | None = None
 
-    _contributors: str | None = None
-    _is_community: bool = False
     _is_base: bool = False
     _settings: Type[DTMProviderSettings] | None = DTMProviderSettings
 
@@ -143,15 +141,6 @@ class DTMProvider(ABC):
         return self.url.format(**kwargs)
 
     @classmethod
-    def contributors(cls) -> str | None:
-        """Contributors of the provider.
-
-        Returns:
-            str: Contributors of the provider.
-        """
-        return cls._contributors
-
-    @classmethod
     def is_base(cls) -> bool:
         """Is the provider a base provider.
 
@@ -159,15 +148,6 @@ class DTMProvider(ABC):
             bool: True if the provider is a base provider, False otherwise.
         """
         return cls._is_base
-
-    @classmethod
-    def is_community(cls) -> bool:
-        """Is the provider a community-driven project.
-
-        Returns:
-            bool: True if the provider is a community-driven project, False otherwise.
-        """
-        return cls._is_community
 
     @classmethod
     def settings(cls) -> Type[DTMProviderSettings] | None:

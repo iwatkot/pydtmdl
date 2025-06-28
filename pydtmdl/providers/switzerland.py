@@ -23,7 +23,6 @@ class SwitzerlandProvider(DTMProvider):
     _icon = "🇨🇭"
     _resolution = 0.5
     _settings = SwitzerlandProviderSettings
-    _is_community = True
 
     _extents = [(47.8308275417, 45.7769477403, 10.4427014502, 6.02260949059)]
 

@@ -12,7 +12,6 @@ class NiedersachsenProvider(WMSProvider, DTMProvider):
     _region = "DE"
     _icon = "🇩🇪󠁥󠁢󠁹󠁿"
     _resolution = 1.0
-    _is_community = True
     _instructions = (
         "Warning: The Niedersachsen DGM1 data is provided as 8-bit Cloud Optimized GeoTIFF "
         "(whole meters only). You will need to use blur ('Blur Radius' under 'DEM Settings') "

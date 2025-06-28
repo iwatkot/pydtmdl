@@ -13,7 +13,6 @@ class ItalyProvider(WCSProvider, DTMProvider):
     _region = "IT"
     _icon = "🇮🇹"
     _resolution = 10.0
-    _is_community = True
     _instructions = None
     _is_base = False
     _extents = [(47.15570815704503, 35.177652867276855, 19.720144130809693, 6.527697471770745)]

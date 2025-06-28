@@ -18,7 +18,6 @@ class DenmarkProvider(WCSProvider, DTMProvider):
     _region = "DK"
     _icon = "🇩🇰"
     _resolution = 0.4
-    _is_community = True
     _is_base = False
     _settings = DenmarkProviderSettings
     _extents = [(57.7690657013977, 54.4354651516217, 15.5979112056959, 8.00830949937517)]

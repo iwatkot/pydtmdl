@@ -12,7 +12,6 @@ class England1MProvider(WCSProvider, DTMProvider):
     _region = "UK"
     _icon = "🏴󠁧󠁢󠁥󠁮󠁧󠁿"
     _resolution = 1.0
-    _is_community = True
     _instructions = None
     _is_base = False
     _extents = [(55.87708724246775, 49.85060473351981, 2.0842821419111135, -7.104775741839742)]
