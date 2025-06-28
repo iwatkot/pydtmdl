@@ -20,7 +20,6 @@ class FinlandProvider(WCSProvider, DTMProvider):
     _icon = "🇫🇮"
     _resolution = 2.0
     _settings = FinlandProviderSettings
-    _is_base = False
     _extents = [(70.09, 59.45, 31.59, 19.08)]
 
     _url = "https://avoin-karttakuva.maanmittauslaitos.fi/ortokuvat-ja-korkeusmallit/wcs/v2"

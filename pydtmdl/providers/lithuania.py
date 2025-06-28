@@ -15,7 +15,6 @@ class LithuaniaProvider(DTMProvider):
     _region = "LT"
     _icon = "🇱🇹"
     _resolution = 1.0
-    _is_base = False
     _extents = [
         (
             56.4501789128452,

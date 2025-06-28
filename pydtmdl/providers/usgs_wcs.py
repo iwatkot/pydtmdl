@@ -13,7 +13,6 @@ class USGSWCSProvider(WCSProvider, DTMProvider):
     _icon = "🇺🇸"
     _resolution = 1.0
     _instructions = None
-    _is_base = False
     _extents = [(50.0, 17.0, -64.0, -162.0)]
 
     _url = "https://elevation.nationalmap.gov/arcgis/services/3DEPElevation/ImageServer/WCSServer"

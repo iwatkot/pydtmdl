@@ -12,7 +12,6 @@ class SpainProvider(WCSProvider, DTMProvider):
     _region = "ES"
     _icon = "🇪🇸"
     _resolution = 5.0
-    _is_base = False
     _extents = [
         (43.9299999999999997, 27.6299999999999990, 4.9400000000000004, -18.2100000000000009)
     ]

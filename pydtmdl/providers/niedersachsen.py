@@ -17,7 +17,6 @@ class NiedersachsenProvider(WMSProvider, DTMProvider):
         "(whole meters only). You will need to use blur ('Blur Radius' under 'DEM Settings') "
         "to smooth the data."
     )
-    _is_base = False
     _extents = [(54.148101, 51.153098, 11.754046, 6.505772)]
 
     _url = "https://opendata.lgln.niedersachsen.de/doorman/noauth/dgm_wms"

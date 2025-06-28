@@ -12,7 +12,6 @@ class HessenProvider(WCSProvider, DTMProvider):
     _region = "DE"
     _icon = "🇩🇪󠁥"
     _resolution = 1.0
-    _is_base = False
     _extents = [(51.66698, 49.38533, 10.25780, 7.72773)]
 
     _url = "https://inspire-hessen.de/raster/dgm1/ows"

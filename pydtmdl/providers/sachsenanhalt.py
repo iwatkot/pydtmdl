@@ -12,7 +12,6 @@ class SachsenAnhaltProvider(WCSProvider, DTMProvider):
     _region = "DE"
     _icon = "🇩🇪"
     _resolution = 1.0
-    _is_base = False
     _extents = [
         (53.0769416826493412, 50.8927195980075453, 13.3232545527125836, 10.5092298520646867)
     ]

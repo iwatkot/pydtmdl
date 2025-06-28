@@ -17,7 +17,6 @@ class FranceProvider(DTMProvider):
     _resolution = 1.0
 
     _url = "https://data.cquest.org/ign/rgealti/repack/cog/RGEALTI_2-0_1M_COG_LAMB93-IGN69_FXX.vrt"
-    _is_base = False
     # no extents, because it also has a few colonies throughout the world
     _extents = [
         (51.2, 41.333, 9.55, -5.225),  # France

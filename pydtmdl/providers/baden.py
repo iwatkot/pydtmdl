@@ -13,7 +13,6 @@ class BadenWurttembergProvider(WCSProvider, DTMProvider):
     _icon = "🇩🇪"
     _resolution = 1.0
     _instructions = None
-    _is_base = False
     _extents = [(49.79645444804715, 47.52877040346605, 10.54203149250156, 7.444081717803481)]
 
     _url = "https://owsproxy.lgl-bw.de/owsproxy/wcs/WCS_INSP_BW_Hoehe_Coverage_DGM1"

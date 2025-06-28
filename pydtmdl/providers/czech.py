@@ -13,7 +13,6 @@ class CzechProvider(WCSProvider, DTMProvider):
     _icon = "🇨🇿"
     _resolution = 5.0
     _instructions = None
-    _is_base = False
     _extents = [
         (51.0576876059846754, 48.4917065572081754, 18.9775933665038821, 12.0428143585602161)
     ]
