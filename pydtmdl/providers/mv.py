@@ -22,7 +22,6 @@ class MecklenburgVorpommernProvider(WCSProvider, DTMProvider):
     _region = "DE"
     _icon = "🇩🇪"
     _resolution = 1.0
-    _instructions = None
     _settings = MecklenburgVorpommernProviderSettings
     _extents = [(54.8, 53, 14.5, 10.5)]
 

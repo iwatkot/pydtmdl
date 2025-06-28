@@ -17,7 +17,6 @@ class ThuringiaProvider(DTMProvider):
     _region = "DE"
     _icon = "🇩🇪󠁥󠁢󠁹󠁿"
     _resolution = 1.0
-    _instructions = None
     _extents = [(51.5997, 50.2070, 12.69674, 9.8548)]
 
     def __init__(self, *args, **kwargs):

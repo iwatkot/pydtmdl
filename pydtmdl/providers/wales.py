@@ -16,7 +16,6 @@ class WalesProvider(DTMProvider):
     _region = "UK"
     _icon = "🏴󠁧󠁢󠁷󠁬󠁳󠁿󠁧󠁢󠁷󠁬󠁳󠁿"
     _resolution = 1.0
-    _instructions = None
     _extents = [(55.87708724246775, 49.85060473351981, 2.0842821419111135, -7.104775741839742)]
 
     _url = "https://datamap.gov.wales/geoserver/ows"  # pylint: disable=line-too-long

@@ -12,7 +12,6 @@ class NorwayProvider(WCSProvider, DTMProvider):
     _region = "NO"
     _icon = "🇳🇴"
     _resolution = 1.0
-    _instructions = None
     _extents = [
         (72.1016879476356962, 57.2738836442695103, 33.3365910058243742, -2.0075617181675725)
     ]

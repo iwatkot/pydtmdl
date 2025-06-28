@@ -13,7 +13,6 @@ class ItalyProvider(WCSProvider, DTMProvider):
     _region = "IT"
     _icon = "🇮🇹"
     _resolution = 10.0
-    _instructions = None
     _extents = [(47.15570815704503, 35.177652867276855, 19.720144130809693, 6.527697471770745)]
 
     _url = "http://tinitaly.pi.ingv.it/TINItaly_1_1/wcs"
