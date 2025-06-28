@@ -1,7 +1,7 @@
 """This module contains provider of Niedersachsen data."""
 
-from maps4fs.generator.dtm.base.wms import WMSProvider
-from maps4fs.generator.dtm.dtm import DTMProvider
+from pydtmdl.base.dtm import DTMProvider
+from pydtmdl.base.wms import WMSProvider
 
 
 class NiedersachsenProvider(WMSProvider, DTMProvider):

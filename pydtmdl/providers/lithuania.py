@@ -3,8 +3,9 @@
 from typing import List
 
 import requests
-from maps4fs.generator.dtm.dtm import DTMProvider
-from maps4fs.generator.dtm.utils import tile_bbox
+
+from pydtmdl.base.dtm import DTMProvider
+from pydtmdl.utils import tile_bbox
 
 
 class LithuaniaProvider(DTMProvider):

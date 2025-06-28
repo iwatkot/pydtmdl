@@ -3,7 +3,8 @@
 import os
 
 import requests
-from maps4fs.generator.dtm.dtm import DTMProvider, DTMProviderSettings
+
+from pydtmdl.base.dtm import DTMProvider, DTMProviderSettings
 
 
 class ScotlandProviderSettings(DTMProviderSettings):

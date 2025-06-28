@@ -4,3 +4,4 @@ requests
 pydantic
 tqdm
 osmnx
+owslib

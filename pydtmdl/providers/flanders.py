@@ -1,7 +1,7 @@
 """This module contains provider of Flanders data."""
 
-from maps4fs.generator.dtm.base.wcs import WCSProvider
-from maps4fs.generator.dtm.dtm import DTMProvider
+from pydtmdl.base.dtm import DTMProvider
+from pydtmdl.base.wcs import WCSProvider
 
 
 class FlandersProvider(WCSProvider, DTMProvider):

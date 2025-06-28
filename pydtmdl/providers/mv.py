@@ -1,7 +1,7 @@
 """This module contains provider of Mecklenburg-Vorpommern data."""
 
-from maps4fs.generator.dtm.base.wcs import WCSProvider
-from maps4fs.generator.dtm.dtm import DTMProvider, DTMProviderSettings
+from pydtmdl.base.dtm import DTMProvider, DTMProviderSettings
+from pydtmdl.base.wcs import WCSProvider
 
 
 class MecklenburgVorpommernProviderSettings(DTMProviderSettings):

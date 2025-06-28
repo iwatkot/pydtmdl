@@ -5,7 +5,8 @@ import os
 from xml.etree import ElementTree as ET
 
 import requests
-from maps4fs.generator.dtm.dtm import DTMProvider
+
+from pydtmdl.base.dtm import DTMProvider
 
 
 class BavariaProvider(DTMProvider):

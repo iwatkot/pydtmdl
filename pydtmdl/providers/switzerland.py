@@ -4,8 +4,9 @@ import json
 import os
 
 import requests
-from maps4fs.generator.dtm import utils
-from maps4fs.generator.dtm.dtm import DTMProvider, DTMProviderSettings
+
+from pydtmdl import utils
+from pydtmdl.base.dtm import DTMProvider, DTMProviderSettings
 
 
 class SwitzerlandProviderSettings(DTMProviderSettings):

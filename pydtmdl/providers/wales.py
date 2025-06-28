@@ -4,8 +4,9 @@ import os
 from math import ceil, floor
 
 import requests
-from maps4fs.generator.dtm.dtm import DTMProvider
 from pyproj import Transformer
+
+from pydtmdl.base.dtm import DTMProvider
 
 
 class WalesProvider(DTMProvider):

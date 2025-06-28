@@ -1,8 +1,9 @@
 """This module contains provider of Finland data."""
 
-from maps4fs.generator.dtm.base.wcs import WCSProvider
-from maps4fs.generator.dtm.dtm import DTMProvider, DTMProviderSettings
 from owslib.util import Authentication
+
+from pydtmdl.base.dtm import DTMProvider, DTMProviderSettings
+from pydtmdl.base.wcs import WCSProvider
 
 
 class FinlandProviderSettings(DTMProviderSettings):

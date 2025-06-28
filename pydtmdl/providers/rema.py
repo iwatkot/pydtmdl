@@ -3,7 +3,8 @@
 import os
 
 import requests
-from maps4fs.generator.dtm.dtm import DTMProvider
+
+from pydtmdl.base.dtm import DTMProvider
 
 
 class REMAProvider(DTMProvider):

@@ -6,8 +6,8 @@ from abc import abstractmethod
 from owslib.wcs import WebCoverageService
 from tqdm import tqdm
 
-from maps4fs.generator.dtm import utils
-from maps4fs.generator.dtm.dtm import DTMProvider
+from pydtmdl import utils
+from pydtmdl.base.dtm import DTMProvider
 
 
 # pylint: disable=too-many-locals

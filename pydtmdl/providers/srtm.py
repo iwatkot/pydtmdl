@@ -6,7 +6,8 @@ import os
 import shutil
 
 import requests
-from maps4fs.generator.dtm.dtm import DTMProvider
+
+from pydtmdl.base.dtm import DTMProvider
 
 
 class SRTM30Provider(DTMProvider):
