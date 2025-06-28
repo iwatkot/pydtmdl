@@ -20,8 +20,6 @@ class SRTM30Provider(DTMProvider):
 
     _url = "https://elevation-tiles-prod.s3.amazonaws.com/skadi/{latitude_band}/{tile_name}.hgt.gz"
 
-    _default_settings = {"DEMSettings": {"blur_radius": 35}}
-
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.hgt_directory = os.path.join(self._tile_directory, "hgt")

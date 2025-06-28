@@ -44,16 +44,6 @@ class DTMProvider(ABC):
 
     _instructions: str | None = None
 
-    _base_instructions = None
-
-    # AdvancedSettings that should be changed by the DTM Provider if it's selected.
-    # * This feature has effect only in the WebUI of the app and ignored in Python package.
-    # The first level of the dictionary is a category name,
-    # for example: TextureSettings, DEMSettings, etc.
-    # The second level is a name of particular setting in the category.
-    # Example: {"DEMSettings": {"blur_radius": 35}}
-    _default_settings: dict[str, dict[str, Any]] = {}
-
     def __init__(
         self,
         coordinates: tuple[float, float],
@@ -72,15 +62,6 @@ class DTMProvider(ABC):
         os.makedirs(self._tile_directory, exist_ok=True)
 
         self.logger = logger
-
-    @classmethod
-    def default_settings(cls) -> dict[str, dict[str, Any]]:
-        """Default settings of the provider.
-
-        Returns:
-            dict: Default settings of the provider.
-        """
-        return cls._default_settings
 
     @classmethod
     def name(cls) -> str | None:
@@ -166,15 +147,6 @@ class DTMProvider(ABC):
             str: Instructions for using the provider.
         """
         return cls._instructions
-
-    @classmethod
-    def base_instructions(cls) -> str | None:
-        """Instructions for using any provider.
-
-        Returns:
-            str: Instructions for using any provider.
-        """
-        return cls._base_instructions
 
     @property
     def user_settings(self) -> DTMProviderSettings | None:
