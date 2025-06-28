@@ -11,7 +11,7 @@ class FlandersProvider(WCSProvider, DTMProvider):
     _name = "Flanders DHM II"
     _region = "BE"
     _icon = "🇧🇪"
-    _resolution = 1
+    _resolution = 1.0
     _author = "[kbrandwijk](https://github.com/kbrandwijk)"
     _is_community = True
     _is_base = False

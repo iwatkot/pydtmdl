@@ -1,12 +1,11 @@
 """This module contains provider of Wales data."""
 
 import os
-from math import floor, ceil
+from math import ceil, floor
 
 import requests
-from pyproj import Transformer
-
 from maps4fs.generator.dtm.dtm import DTMProvider
+from pyproj import Transformer
 
 
 class WalesProvider(DTMProvider):
@@ -16,7 +15,7 @@ class WalesProvider(DTMProvider):
     _name = "Wales 1M"
     _region = "UK"
     _icon = "🏴󠁧󠁢󠁷󠁬󠁳󠁿󠁧󠁢󠁷󠁬󠁳󠁿"
-    _resolution = 1
+    _resolution = 1.0
     _author = "[garnshared](https://github.com/garnshared)"
     _is_community = True
     _instructions = None
@@ -48,7 +47,6 @@ class WalesProvider(DTMProvider):
 
         transformer = Transformer.from_crs("EPSG:4326", "EPSG:27700", always_xy=True)
 
-
         # Make the GET request
         north, south, east, west = self.get_bbox()
 
@@ -69,7 +67,6 @@ class WalesProvider(DTMProvider):
         # Calculate the number of tiles in x and y directions
         x_tiles = abs(x_max - x_min) // 1000
         y_tiles = abs(y_max - y_min) // 1000
-
 
         for x_tile in range(x_tiles):
             for y_tile in range(y_tiles):
@@ -95,16 +92,18 @@ class WalesProvider(DTMProvider):
                         "bbox": f"{b_west},{b_south},{b_east},{b_north}",
                         "feature_count": 10,
                         "info_format": "application/json",
-                        "ENV": "mapstore_language:en"
+                        "ENV": "mapstore_language:en",
                     }
 
-                    response = requests.get(# pylint: disable=W3101
+                    response = requests.get(  # pylint: disable=W3101
                         self.url,  # type: ignore
                         params=params,  # type: ignore
-                        timeout=60
+                        timeout=60,
                     )
 
-                    self.logger.debug("Getting file locations from Welsh Government WMS GetFeatureInfo...")
+                    self.logger.debug(
+                        "Getting file locations from Welsh Government WMS GetFeatureInfo..."
+                    )
 
                     # Check if the request was successful (HTTP status code 200)
                     if response.status_code == 200:
@@ -113,9 +112,11 @@ class WalesProvider(DTMProvider):
                         for feature in features:
                             dtm_link = feature.get("properties", {}).get("dtm_link")
                             if dtm_link:
-                                urls.append("https://"+dtm_link)
+                                urls.append("https://" + dtm_link)
                     else:
-                        self.logger.error("Failed to get data. HTTP Status Code: %s", response.status_code)
+                        self.logger.error(
+                            "Failed to get data. HTTP Status Code: %s", response.status_code
+                        )
                 except Exception as e:
                     self.logger.error("Failed to get data. Error: %s", e)
 

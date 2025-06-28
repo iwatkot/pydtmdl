@@ -4,7 +4,6 @@ import json
 import os
 
 import requests
-
 from maps4fs.generator.dtm import utils
 from maps4fs.generator.dtm.dtm import DTMProvider, DTMProviderSettings
 
@@ -22,7 +21,7 @@ class SwitzerlandProvider(DTMProvider):
     _name = "Switzerland"
     _region = "CH"
     _icon = "🇨🇭"
-    _resolution = "0.5-2"
+    _resolution = 0.5
     _settings = SwitzerlandProviderSettings
     _author = "[kbrandwijk](https://github.com/kbrandwijk)"
     _is_community = True

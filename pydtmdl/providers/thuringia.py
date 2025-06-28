@@ -1,19 +1,22 @@
 """This module contains provider of Thuringia data."""
 
 import os
+
 from maps4fs.generator.dtm import utils
 from maps4fs.generator.dtm.dtm import DTMProvider
+
 
 class ThuringiaProvider(DTMProvider):
     """Provider of Thuringia data.
     Data is provided by the Kompetenzzentrum Geodateninfrastruktur Thüringen (© GDI-Th) and available
     at https://geoportal.thueringen.de/gdi-th/download-offene-geodaten/download-hoehendaten under BY 2.0 license.
     """
+
     _code = "thuringia"
     _name = "Thüringen DGM1"
     _region = "DE"
     _icon = "🇩🇪󠁥󠁢󠁹󠁿"
-    _resolution = 1
+    _resolution = 1.0
     _author = "[H4rdB4se](https://github.com/H4rdB4se)"
     _is_community = True
     _instructions = None

@@ -1,9 +1,8 @@
 """This module contains provider of Finland data."""
 
-from owslib.util import Authentication
-
 from maps4fs.generator.dtm.base.wcs import WCSProvider
 from maps4fs.generator.dtm.dtm import DTMProvider, DTMProviderSettings
+from owslib.util import Authentication
 
 
 class FinlandProviderSettings(DTMProviderSettings):
@@ -19,7 +18,7 @@ class FinlandProvider(WCSProvider, DTMProvider):
     _name = "Finland"
     _region = "FI"
     _icon = "🇫🇮"
-    _resolution = 2
+    _resolution = 2.0
     _settings = FinlandProviderSettings
     _author = "[kbrandwijk](https://github.com/kbrandwijk)"
     _is_community = True

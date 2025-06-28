@@ -3,7 +3,6 @@
 import os
 
 import requests
-
 from maps4fs.generator.dtm.dtm import DTMProvider, DTMProviderSettings
 
 
@@ -50,7 +49,7 @@ class ScotlandProvider(DTMProvider):
     _name = "Scotland LiDAR"
     _region = "UK"
     _icon = "🏴󠁧󠁢󠁳󠁣󠁴󠁿"
-    _resolution = "variable"
+    _resolution = 1.0
     _settings = ScotlandProviderSettings
     _author = "[kbrandwijk](https://github.com/kbrandwijk)"
     _is_community = True

@@ -11,7 +11,7 @@ class USGSWCSProvider(WCSProvider, DTMProvider):
     _name = "USGS"
     _region = "USA"
     _icon = "🇺🇸"
-    _resolution = "1-90"
+    _resolution = 1.0
     _author = "[kbrandwijk](https://github.com/kbrandwijk)"
     _is_community = True
     _instructions = None

@@ -11,7 +11,7 @@ class CzechProvider(WCSProvider, DTMProvider):
     _name = "Czech Republic"
     _region = "CZ"
     _icon = "🇨🇿"
-    _resolution = 5
+    _resolution = 5.0
     _author = "[kbrandwijk](https://github.com/kbrandwijk)"
     _is_community = True
     _instructions = None

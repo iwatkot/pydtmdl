@@ -1,9 +1,8 @@
 """This module contains provider of Italy data."""
 
-from owslib.util import Authentication
-
 from maps4fs.generator.dtm.base.wcs import WCSProvider
 from maps4fs.generator.dtm.dtm import DTMProvider
+from owslib.util import Authentication
 
 
 class ItalyProvider(WCSProvider, DTMProvider):
@@ -13,7 +12,7 @@ class ItalyProvider(WCSProvider, DTMProvider):
     _name = "Italy Tinitaly/1.1"
     _region = "IT"
     _icon = "🇮🇹"
-    _resolution = 10
+    _resolution = 10.0
     _author = "[kbrandwijk](https://github.com/kbrandwijk)"
     _is_community = True
     _instructions = None

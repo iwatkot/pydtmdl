@@ -5,7 +5,6 @@ import os
 from xml.etree import ElementTree as ET
 
 import requests
-
 from maps4fs.generator.dtm.dtm import DTMProvider
 
 
@@ -19,7 +18,7 @@ class BavariaProvider(DTMProvider):
     _name = "Bavaria DGM1"
     _region = "DE"
     _icon = "🇩🇪󠁥󠁢󠁹󠁿"
-    _resolution = 1
+    _resolution = 1.0
     _author = "[H4rdB4se](https://github.com/H4rdB4se)"
     _is_community = True
     _instructions = None

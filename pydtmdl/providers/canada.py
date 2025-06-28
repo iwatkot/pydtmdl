@@ -11,7 +11,7 @@ class CanadaProvider(WCSProvider, DTMProvider):
     _name = "Canada HRDEM"
     _region = "CN"
     _icon = "🇨🇦"
-    _resolution = 1
+    _resolution = 1.0
     _author = "[kbrandwijk](https://github.com/kbrandwijk)"
     _is_community = True
     _is_base = False

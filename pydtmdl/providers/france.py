@@ -1,6 +1,7 @@
 """This module contains provider of France data."""
 
 import os
+
 import rasterio
 from maps4fs.generator.dtm import utils
 from maps4fs.generator.dtm.dtm import DTMProvider
@@ -13,7 +14,7 @@ class FranceProvider(DTMProvider):
     _name = "France RGE Alti 2.0"
     _region = "FR"
     _icon = "🇫🇷"
-    _resolution = 1
+    _resolution = 1.0
     _author = "[kbrandwijk](https://github.com/kbrandwijk)"
     _is_community = True
 

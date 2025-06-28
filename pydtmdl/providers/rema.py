@@ -3,7 +3,6 @@
 import os
 
 import requests
-
 from maps4fs.generator.dtm.dtm import DTMProvider
 
 
@@ -14,7 +13,7 @@ class REMAProvider(DTMProvider):
     _name = "REMA Antarctica"
     _region = "Global"
     _icon = "🌍"
-    _resolution = 2
+    _resolution = 2.0
     _author = "[kbrandwijk](https://github.com/kbrandwijk)"
     _is_community = True
 

@@ -13,13 +13,12 @@ import numpy as np
 import osmnx as ox
 import rasterio
 import requests
+from maps4fs.logger import Logger
 from pydantic import BaseModel
 from rasterio.enums import Resampling
 from rasterio.merge import merge
 from rasterio.warp import calculate_default_transform, reproject
 from tqdm import tqdm
-
-from maps4fs.logger import Logger
 
 if TYPE_CHECKING:
     from maps4fs.generator.map import Map
@@ -36,7 +35,7 @@ class DTMProvider(ABC):
     _name: str | None = None
     _region: str | None = None
     _icon: str | None = None
-    _resolution: float | str | None = None
+    _resolution: float | None = None
 
     _url: str | None = None
 

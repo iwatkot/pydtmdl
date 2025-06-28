@@ -11,7 +11,7 @@ class HessenProvider(WCSProvider, DTMProvider):
     _name = "Hessen DGM1"
     _region = "DE"
     _icon = "🇩🇪󠁥"
-    _resolution = 1
+    _resolution = 1.0
     _author = "[kbrandwijk](https://github.com/kbrandwijk)"
     _is_community = True
     _is_base = False
