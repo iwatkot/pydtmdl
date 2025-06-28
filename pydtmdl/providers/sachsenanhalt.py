@@ -12,7 +12,6 @@ class SachsenAnhaltProvider(WCSProvider, DTMProvider):
     _region = "DE"
     _icon = "🇩🇪"
     _resolution = 1.0
-    _author = "[kbrandwijk](https://github.com/kbrandwijk)"
     _is_community = True
     _is_base = False
     _extents = [

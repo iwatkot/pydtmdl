@@ -15,7 +15,6 @@ class FranceProvider(DTMProvider):
     _region = "FR"
     _icon = "🇫🇷"
     _resolution = 1.0
-    _author = "[kbrandwijk](https://github.com/kbrandwijk)"
     _is_community = True
 
     _url = "https://data.cquest.org/ign/rgealti/repack/cog/RGEALTI_2-0_1M_COG_LAMB93-IGN69_FXX.vrt"

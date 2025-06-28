@@ -16,7 +16,6 @@ class WalesProvider(DTMProvider):
     _region = "UK"
     _icon = "🏴󠁧󠁢󠁷󠁬󠁳󠁿󠁧󠁢󠁷󠁬󠁳󠁿"
     _resolution = 1.0
-    _author = "[garnshared](https://github.com/garnshared)"
     _is_community = True
     _instructions = None
     _is_base = False

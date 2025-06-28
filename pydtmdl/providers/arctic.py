@@ -14,7 +14,6 @@ class ArcticProvider(DTMProvider):
     _region = "Global"
     _icon = "🌍"
     _resolution = 2.0
-    _author = "[kbrandwijk](https://github.com/kbrandwijk)"
     _is_community = True
 
     _extents = [(83.98823036056658, 50.7492704708152, 179.99698443265999, -180)]

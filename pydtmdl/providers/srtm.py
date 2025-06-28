@@ -1,14 +1,11 @@
 """This module contains provider of Shuttle Radar Topography Mission (SRTM) 30m data."""
 
-# Author: https://github.com/iwatkot
-
 import gzip
 import math
 import os
 import shutil
 
 import requests
-
 from maps4fs.generator.dtm.dtm import DTMProvider
 
 
@@ -22,10 +19,6 @@ class SRTM30Provider(DTMProvider):
     _resolution = 30.0
 
     _url = "https://elevation-tiles-prod.s3.amazonaws.com/skadi/{latitude_band}/{tile_name}.hgt.gz"
-
-    _author = "[iwatkot](https://github.com/iwatkot)"
-
-    # _instructions = "ℹ️ Recommended settings:  \nDEM Settings -> Blur Radius: **35**"
 
     _default_settings = {"DEMSettings": {"blur_radius": 35}}
 

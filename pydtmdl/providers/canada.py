@@ -12,7 +12,6 @@ class CanadaProvider(WCSProvider, DTMProvider):
     _region = "CN"
     _icon = "🇨🇦"
     _resolution = 1.0
-    _author = "[kbrandwijk](https://github.com/kbrandwijk)"
     _is_community = True
     _is_base = False
     _extents = [(76.49491845750764, 33.66564101989275, -26.69697497450798, -157.7322455868316)]

@@ -13,7 +13,6 @@ class ItalyProvider(WCSProvider, DTMProvider):
     _region = "IT"
     _icon = "🇮🇹"
     _resolution = 10.0
-    _author = "[kbrandwijk](https://github.com/kbrandwijk)"
     _is_community = True
     _instructions = None
     _is_base = False

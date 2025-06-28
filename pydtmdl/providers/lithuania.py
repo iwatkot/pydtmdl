@@ -3,7 +3,6 @@
 from typing import List
 
 import requests
-
 from maps4fs.generator.dtm.dtm import DTMProvider
 from maps4fs.generator.dtm.utils import tile_bbox
 
@@ -16,7 +15,6 @@ class LithuaniaProvider(DTMProvider):
     _region = "LT"
     _icon = "🇱🇹"
     _resolution = 1.0
-    _author = "[Tox3](https://github.com/Tox3)"
     _is_community = True
     _is_base = False
     _extents = [

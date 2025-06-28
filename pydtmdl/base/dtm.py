@@ -36,7 +36,6 @@ class DTMProvider(ABC):
 
     _url: str | None = None
 
-    _author: str | None = None
     _contributors: str | None = None
     _is_community: bool = False
     _is_base: bool = False
@@ -142,15 +141,6 @@ class DTMProvider(ABC):
         if not self.url:
             raise ValueError("URL must be defined.")
         return self.url.format(**kwargs)
-
-    @classmethod
-    def author(cls) -> str | None:
-        """Author of the provider.
-
-        Returns:
-            str: Author of the provider.
-        """
-        return cls._author
 
     @classmethod
     def contributors(cls) -> str | None:

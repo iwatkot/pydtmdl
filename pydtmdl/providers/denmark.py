@@ -18,7 +18,6 @@ class DenmarkProvider(WCSProvider, DTMProvider):
     _region = "DK"
     _icon = "🇩🇰"
     _resolution = 0.4
-    _author = "[kbrandwijk](https://github.com/kbrandwijk)"
     _is_community = True
     _is_base = False
     _settings = DenmarkProviderSettings

@@ -12,7 +12,6 @@ class FlandersProvider(WCSProvider, DTMProvider):
     _region = "BE"
     _icon = "🇧🇪"
     _resolution = 1.0
-    _author = "[kbrandwijk](https://github.com/kbrandwijk)"
     _is_community = True
     _is_base = False
     _extents = [(51.5150730375579684, 50.6694992827160817, 5.9444417082210812, 2.5170092434134252)]
