@@ -1,5 +1,5 @@
 <div align="center" markdown>
-<img src="">
+<img src="https://github.com/iwatkot/pydtmdl/releases/download/0.0.1/pydtmdl.png">
 </a>
 
 <p align="center">
