@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pydtmdl"
+version = "1.0.0"
+description = "Python library to download DTM data from various providers."
+authors = [{name = "iwatkot", email = "iwatkot@gmail.com"}]
+license = {text = "Apache License 2.0"}
+readme = "README.md"
+keywords = ["dtm", "digital terrain model", "elevation", "geospatial"]
+classifiers = [
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "numpy",
+    "rasterio",
+    "requests",
+    "pydantic",
+    "tqdm",
+    "osmnx",
+    "owslib"
+]
+
+[project.urls]
+Homepage = "https://github.com/iwatkot/pydtmdl"
+Repository = "https://github.com/iwatkot/pydtmdl"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["pydtmdl*"]
+exclude = ["dev*", "bot*", "*data", "*docker", "*webui", "*docs"]

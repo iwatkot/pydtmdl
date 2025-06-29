@@ -50,7 +50,7 @@ class SwitzerlandProvider(DTMProvider):
         """
         if not self.user_settings:
             raise ValueError("User settings are required for this provider.")
-        if not self.user_settings.resolution:
+        if not self.user_settings.resolution:  # type: ignore
             raise ValueError("Resolution is required for this provider.")
 
         urls = []

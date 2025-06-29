@@ -5,3 +5,6 @@ pydantic
 tqdm
 osmnx
 owslib
+mypy
+pylint
+types-requests

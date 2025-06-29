@@ -1,0 +1,35 @@
+name: Tests
+
+on:
+  push:
+    branches:
+      - '**'
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v2
+
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: 3.12
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r dev/requirements.txt
+
+      - name: Run mypy to generate cache
+        run: mypy pydtmdl || true
+
+      - name: Install missing stub packages
+        run: mypy --install-types --non-interactive
+
+      - name: Run mypy
+        run: mypy pydtmdl
+
+      - name: Run pylint
+        run: pylint pydtmdl

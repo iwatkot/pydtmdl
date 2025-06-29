@@ -305,7 +305,7 @@ class DTMProvider(ABC):
         with rasterio.open(tile) as src:
             crs = src.crs
         if crs != "EPSG:4326":
-            self.logger.debug(f"Reprojecting GeoTIFF from {crs} to EPSG:4326...")
+            self.logger.debug("Reprojecting GeoTIFF from %s to EPSG:4326...", crs)
             tile = self.reproject_geotiff(tile)
 
         # extract region of interest from the tile
