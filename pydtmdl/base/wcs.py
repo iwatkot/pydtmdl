@@ -14,7 +14,6 @@ from pydtmdl.base.dtm import DTMProvider
 class WCSProvider(DTMProvider):
     """Generic provider of WCS sources."""
 
-    _is_base = True
     _wcs_version = "2.0.1"
     _source_crs: str = "EPSG:4326"
     _tile_size: float = 0.02

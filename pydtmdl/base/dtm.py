@@ -36,7 +36,6 @@ class DTMProvider(ABC):
 
     _url: str | None = None
 
-    _is_base: bool = False
     _settings: Type[DTMProviderSettings] | None = DTMProviderSettings
 
     """Bounding box of the provider in the format (north, south, east, west)."""
@@ -122,15 +121,6 @@ class DTMProvider(ABC):
         return self.url.format(**kwargs)
 
     @classmethod
-    def is_base(cls) -> bool:
-        """Is the provider a base provider.
-
-        Returns:
-            bool: True if the provider is a base provider, False otherwise.
-        """
-        return cls._is_base
-
-    @classmethod
     def settings(cls) -> Type[DTMProviderSettings] | None:
         """Settings model of the provider.
 
@@ -138,6 +128,15 @@ class DTMProvider(ABC):
             Type[DTMProviderSettings]: Settings model of the provider.
         """
         return cls._settings
+
+    @classmethod
+    def settings_required(cls) -> bool:
+        """Check if the provider requires user settings.
+
+        Returns:
+            bool: True if the provider requires user settings, False otherwise.
+        """
+        return cls._settings is not None and cls._settings != DTMProviderSettings
 
     @classmethod
     def instructions(cls) -> str | None:
@@ -196,8 +195,8 @@ class DTMProvider(ABC):
             dict: Provider descriptions.
         """
         providers: dict[str, str] = {}
-        for provider in cls.__subclasses__():
-            if not provider.is_base() and provider.inside_bounding_box(lat_lon):
+        for provider in cls.get_non_base_providers():
+            if provider.inside_bounding_box(lat_lon):
                 code = provider.code()
                 if code is not None:
                     providers[code] = provider.description()
@@ -206,6 +205,57 @@ class DTMProvider(ABC):
         providers = dict(sorted(providers.items(), key=lambda item: item[0] != default_code))
 
         return providers
+
+    @classmethod
+    def get_non_base_providers(cls) -> list[Type[DTMProvider]]:
+        """Get all non-base providers.
+
+        Returns:
+            list: List of non-base provider classes.
+        """
+        from pydtmdl.base.wcs import WCSProvider
+        from pydtmdl.base.wms import WMSProvider
+
+        base_providers = [WCSProvider, WMSProvider]
+
+        return [provider for provider in cls.__subclasses__() if provider not in base_providers]
+
+    @classmethod
+    def get_list(cls, lat_lon: tuple[float, float]) -> list[Type[DTMProvider]]:
+        """Get all providers that can be used for the given coordinates.
+
+        Arguments:
+            lat_lon (tuple): Latitude and longitude of the center point.
+
+        Returns:
+            list: List of provider classes.
+        """
+        providers = []
+        for provider in cls.get_non_base_providers():
+            if provider.inside_bounding_box(lat_lon):
+                providers.append(provider)
+        return providers
+
+    @classmethod
+    def get_best(
+        cls, lat_lon: tuple[float, float], default_code: str = "srtm30"
+    ) -> Type[DTMProvider] | None:
+        """Get the best provider for the given coordinates.
+
+        Arguments:
+            lat_lon (tuple): Latitude and longitude of the center point.
+            default_code (str): Default provider code.
+
+        Returns:
+            DTMProvider: Best provider class or None if not found.
+        """
+        providers = cls.get_list(lat_lon)
+        if not providers:
+            return cls.get_provider_by_code(default_code)
+
+        # Sort providers by priority and return the best one
+        providers.sort(key=lambda p: p._resolution or float("inf"))
+        return providers[0]
 
     @classmethod
     def inside_bounding_box(cls, lat_lon: tuple[float, float]) -> bool:
@@ -261,6 +311,21 @@ class DTMProvider(ABC):
         # extract region of interest from the tile
         data = self.extract_roi(tile)
 
+        return data
+
+    @property
+    def image(self) -> np.ndarray:
+        """Get numpy array of the tile and check if it contains any data.
+
+        Returns:
+            np.ndarray: Numpy array of the tile.
+
+        Raises:
+            ValueError: If the tile does not contain any data.
+        """
+        data = self.get_numpy()
+        if not np.any(data):
+            raise ValueError("No data in the tile. Try different provider.")
         return data
 
     # region helpers

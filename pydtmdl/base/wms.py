@@ -14,7 +14,6 @@ from pydtmdl.base.dtm import DTMProvider
 class WMSProvider(DTMProvider):
     """Generic provider of WMS sources."""
 
-    _is_base = True
     _wms_version = "1.3.0"
     _source_crs: str = "EPSG:4326"
     _tile_size: float = 0.02
