@@ -201,7 +201,7 @@ input_something = self.user_settings.input_something
         return tiles
 ```
 
-This method uses the helper method `get_bbox` to get the coordinates of the bounding box of the map area. If your DTM provider requires you to provide the coordinates in a different projection, you need to make sure you convert. For an example of this, see the `transform_bbox` method in [nrw.py](../maps4fs/generator/dtm/nrw.py).
+This method uses the helper method `get_bbox` to get the coordinates of the bounding box of the map area. If your DTM provider requires you to provide the coordinates in a different projection, you need to make sure you convert. For an example of this, see the `transform_bbox` method in [nrw.py](pydtmdl/providers/nrw.py).
 Then, it determines which tiles are needed, downloads them all to a temporary folder and extracts them. The base class provides a `_tile_directory` property for convenience that points to a temp folder for your provider.
 Finally, it returns a list of file paths to the downloaded tiles.
 
