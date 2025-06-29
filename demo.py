@@ -42,7 +42,7 @@ if best_provider.settings_required():
 
 provider = best_provider(coords, size=size)
 
-# 8️⃣ Get the tile data as a numpy array.
+# 8️⃣ Get the DTM data as a numpy array.
 # Remember to handle exceptions if the provider does not have data for the given coordinates.
 # In this case, it's recommended to try another provider (from the list of available providers).
 try:
