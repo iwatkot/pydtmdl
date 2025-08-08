@@ -181,6 +181,21 @@ class DTMProvider(ABC):
         return None
 
     @classmethod
+    def get_provider_by_name(cls, name: str) -> Type[DTMProvider] | None:
+        """Get a provider by its name.
+
+        Arguments:
+            name (str): Provider name.
+
+        Returns:
+            DTMProvider: Provider class or None if not found.
+        """
+        for provider in cls.__subclasses__():
+            if provider.name() == name:
+                return provider
+        return None
+
+    @classmethod
     def get_valid_provider_descriptions(
         cls, lat_lon: tuple[float, float], default_code: str = "srtm30"
     ) -> dict[str, str]:
