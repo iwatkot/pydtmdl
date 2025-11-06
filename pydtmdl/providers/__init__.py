@@ -21,6 +21,7 @@ from pydtmdl.providers.sachsenanhalt import SachsenAnhaltProvider
 from pydtmdl.providers.scotland import ScotlandProvider
 from pydtmdl.providers.spain import SpainProvider
 from pydtmdl.providers.srtm import SRTM30Provider
+from pydtmdl.providers.sweden import SwedenProvider
 from pydtmdl.providers.switzerland import SwitzerlandProvider
 from pydtmdl.providers.thuringia import ThuringiaProvider
 from pydtmdl.providers.usgs_wcs import USGSWCSProvider
