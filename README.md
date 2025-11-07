@@ -17,11 +17,12 @@
 </a>
 
 <p align="center">
-    <a href="#Quick-Start">Quick Start</a> •
-    <a href="#Overview">Overview</a> • 
-    <a href="#What-is-a-DTM?">What is a DTM?</a> •
-    <a href="#Supported-DTM-providers">Supported DTM providers</a> •
-    <a href="#Contributing">Contributing</a>
+    <a href="#quick-start">Quick Start</a> •
+    <a href="#overview">Overview</a> • 
+    <a href="#what-is-a-dtm">What is a DTM?</a> •
+    <a href="#supported-dtm-providers">Supported DTM providers</a> •
+    <a href="#licensing-and-data-usage">Licensing and Data Usage</a> •
+    <a href="#contributing">Contributing</a>
 </p>
 
 [![GitHub release (latest SemVer)](https://img.shields.io/github/v/release/iwatkot/pydtmdl)](https://github.com/iwatkot/pydtmdl/releases)
@@ -115,37 +116,58 @@ In addition to SRTM 30m, which provides global coverage, the map above highlight
 | 🇨🇿 Czech Republic                  | 5 meter      | [kbrandwijk](https://github.com/kbrandwijk) |
 | 🇱🇹 Lithuania                       | 1 meter      | [Tox3](https://github.com/Tox3) |
 
+## Licensing and Data Usage
+
+⚠️ **Important**: This library provides access to DTM data from various third-party providers. **PyDTMDL does not own, host, or distribute this data**. Each DTM provider has its own licensing terms and usage restrictions.
+
+**It is your responsibility to:**
+- Check the license and terms of use for each DTM provider you use
+- Ensure compliance with the provider's licensing requirements
+- Verify that your use case (commercial, research, personal, etc.) is permitted
+- Provide proper attribution when required by the data provider
+- Respect any usage limits or restrictions imposed by the provider
+
+The library itself is licensed under the GNU Affero General Public License v3 (AGPL-3.0), but this **does not grant you any rights** to the DTM data accessed through the library. The data licenses are separate and must be obtained directly from the respective providers.
+
+**By using this library, you acknowledge that you are solely responsible for ensuring compliance with all applicable data licenses and terms of use.**
+
+For information about data licensing from specific providers, please refer to their official websites and documentation.
 
 ## Contributing
 
 Contributions are welcome! If you want to add your own DTM provider, please follow this guide.  
 You can also contribute by reporting issues, suggesting improvements, or helping with documentation.
+
 ### What a DTM provider does?
 
 A DTM provider is a service that provides elevation data for a given location. While there's plenty of DTM providers available, only the ones that provide a free and open access to their data can be used in this library.  
 
-The base provider class, [DTMProvider](pydtmdl/base/dtm.py) that all DTM providers inherit from, is responsible for all processing of DEM data. Individual DTM providers are responsible only for downloading the DTM tile(s) for the area.
+The base provider class, [DTMProvider](pydtmdl/base/dtm.py), handles all the heavy lifting: merging tiles, reprojecting to EPSG:4326, and extracting the region of interest. Individual DTM providers only need to implement the `download_tiles()` method to fetch the raw data.
 
-The process for generating the elevation data is:
+The process for generating elevation data is:
 
-- Download all DTM tiles for the desired map area (implemented by each DTM provider)
-- If the DTM provider downloaded multiple tiles, merge these tiles into one
-- If the tile uses a different projection, reproject it to EPSG:4326, which is used for all other data (like OSM)
-- Extract the map area from the tile (some providers, like SRTM, return big tiles that are larger than just the desired area)
+1. Download all DTM tiles for the desired map area (implemented by each DTM provider)
+2. Merge multiple tiles if necessary (handled by base class)
+3. Reproject to EPSG:4326 if needed (handled by base class)
+4. Extract the map area from the tile (handled by base class)
 
-### How to implement a DTM provider?
+### Provider Types
 
-So the DTM provider is a simple class, that receives coordinate of the center point, the size of the region of interest and should download all the needed DTM tiles and return a numpy array with the elevation data.
+There are three main approaches to implementing a DTM provider:
 
-### Example of a DTM provider
+1. **Custom implementation** - Inherit from `DTMProvider` directly for unique APIs
+2. **WCS-based** - Inherit from both `WCSProvider` and `DTMProvider` for OGC WCS services
+3. **WMS-based** - Inherit from both `WMSProvider` and `DTMProvider` for OGC WMS services
 
-➡️ Existing providers can be found in the [providers](pydtmdl/providers/) folder.
+### Example 1: Custom Provider (SRTM)
 
-Let's take a look at an example of a DTM provider implementation.
+➡️ Existing providers can be found in the [pydtmdl/providers/](pydtmdl/providers/) folder.
 
-**Step 1:** define description of the provider.
+**Step 1:** Define the provider metadata.
 
 ```python
+from pydtmdl.base.dtm import DTMProvider
+
 class SRTM30Provider(DTMProvider):
     """Provider of Shuttle Radar Topography Mission (SRTM) 30m data."""
 
@@ -154,73 +176,138 @@ class SRTM30Provider(DTMProvider):
     _region = "Global"
     _icon = "🌎"
     _resolution = 30.0
-
     _url = "https://elevation-tiles-prod.s3.amazonaws.com/skadi/{latitude_band}/{tile_name}.hgt.gz"
-
-    _instructions = "When working with SRTM provider..."
 ```
 
-So, we inherit from the `DTMProvider` class, add some properties to identify the Provider (such as code and region). The most important part is the `_url` property, which is a template for the URL to download the elevation data. But if your provider uses some other approach, you can reimplement related methods.
-
-If you want some additional information or guides you can set the `_instructions` property.
-
-**Step 2 (optional):** use the `DTMProviderSetting` class to define your own settings (if needed).
+**Step 2 (optional):** Define custom settings if your provider requires authentication or configuration.
 
 ```python
-class SRTM30ProviderSettings(DTMProviderSettings):
-    """Settings for the SRTM 30 m provider."""
+from pydtmdl.base.dtm import DTMProviderSettings
 
-    enable_something: bool = True
-    input_something: int = 255
+class SwedenProviderSettings(DTMProviderSettings):
+    """Settings for the Sweden provider."""
+    username: str = ""
+    password: str = ""
+
+class SwedenProvider(DTMProvider):
+    _settings = SwedenProviderSettings
+    _instructions = "ℹ️ This provider requires username and password..."
 ```
 
-Also, you will need to add a new `_settings` property to the provider class.
-
+Access settings in your code:
 ```python
-class SRTM30Provider(DTMProvider):
-    ...
-    _settings = SRTM30ProviderSettings
+username = self.user_settings.username
+password = self.user_settings.password
 ```
 
-If those are provided you'll later be able to use the `user_settings` property to access the settings. In the example it would look like this:
+**Step 3:** Implement the `download_tiles()` method.
 
 ```python
-enable_something = self.user_settings.enable_something
-input_something = self.user_settings.input_something
+def download_tiles(self) -> list[str]:
+    """Download SRTM tiles."""
+    north, south, east, west = self.get_bbox()
+    
+    tiles = []
+    for pair in [(north, east), (south, west), (south, east), (north, west)]:
+        tile_parameters = self.get_tile_parameters(*pair)
+        tile_name = tile_parameters["tile_name"]
+        tile_path = os.path.join(self.hgt_directory, f"{tile_name}.hgt")
+        
+        if not os.path.isfile(tile_path):
+            # Download and decompress tile
+            compressed_path = os.path.join(self.gz_directory, f"{tile_name}.hgt.gz")
+            if not self.download_tile(compressed_path, **tile_parameters):
+                raise FileNotFoundError(f"Tile {tile_name} not found.")
+            # ... decompress logic ...
+        
+        tiles.append(tile_path)
+    return list(set(tiles))
 ```
 
-**Step 3:** implement the `download_tiles` method.
+### Example 2: WCS Provider (England)
+
+For WCS-based providers, inherit from both `WCSProvider` and `DTMProvider`. The base class handles coordinate transformation automatically using the `transform_bbox()` utility from [pydtmdl/utils.py](pydtmdl/utils.py).
 
 ```python
+from pydtmdl.base.dtm import DTMProvider
+from pydtmdl.base.wcs import WCSProvider
+
+class England1MProvider(WCSProvider, DTMProvider):
+    """Provider of England data."""
+    
+    _code = "england1m"
+    _name = "England DGM1"
+    _region = "UK"
+    _icon = "🏴󠁧󠁢󠁥󠁮󠁧󠁿"
+    _resolution = 1.0
+    _extents = [(55.877, 49.851, 2.084, -7.105)]
+    
+    _url = "https://environment.data.gov.uk/geoservices/datasets/.../wcs"
+    _wcs_version = "2.0.1"
+    _source_crs = "EPSG:27700"  # British National Grid
+    _tile_size = 1000
+    
+    def get_wcs_parameters(self, tile):
+        return {
+            "identifier": ["dataset_id"],
+            "subsets": [("E", str(tile[1]), str(tile[3])), ("N", str(tile[0]), str(tile[2]))],
+            "format": "tiff",
+        }
+```
+
+The `WCSProvider` base class automatically:
+- Transforms your bbox from EPSG:4326 to `_source_crs` 
+- Tiles the area based on `_tile_size`
+- Downloads each tile using your `get_wcs_parameters()` method
+- Returns the list of downloaded files
+
+### Example 3: Custom API with Authentication (Sweden)
+
+For providers with custom APIs requiring authentication:
+
+```python
+class SwedenProvider(DTMProvider):
+    _settings = SwedenProviderSettings  # Define custom settings
+    
     def download_tiles(self):
-        """Download SRTM tiles."""
-        north, south, east, west = self.get_bbox()
-
-        tiles = []
-        # Look at each corner of the bbox in case the bbox spans across multiple tiles
-        for pair in [(north, east), (south, west), (south, east), (north, west)]:
-            tile_parameters = self.get_tile_parameters(*pair)
-            tile_name = tile_parameters["tile_name"]
-            decompressed_tile_path = os.path.join(self.hgt_directory, f"{tile_name}.hgt")
-
-            if not os.path.isfile(decompressed_tile_path):
-                compressed_tile_path = os.path.join(self.gz_directory, f"{tile_name}.hgt.gz")
-                if not self.get_or_download_tile(compressed_tile_path, **tile_parameters):
-                    raise FileNotFoundError(f"Tile {tile_name} not found.")
-
-                with gzip.open(compressed_tile_path, "rb") as f_in:
-                    with open(decompressed_tile_path, "wb") as f_out:
-                        shutil.copyfileobj(f_in, f_out)
-            tiles.append(decompressed_tile_path)
-
-        return tiles
+        """Download tiles from STAC API."""
+        download_urls = self.get_download_urls()
+        return self.download_tif_files(download_urls, self.shared_tiff_path)
+    
+    def _get_auth_headers(self) -> dict[str, str]:
+        """Generate auth headers from user settings."""
+        credentials = f"{self.user_settings.username}:{self.user_settings.password}"
+        encoded = base64.b64encode(credentials.encode()).decode()
+        return {"Authorization": f"Basic {encoded}"}
+    
+    def get_download_urls(self) -> list[str]:
+        """Query STAC API for tile URLs within bbox."""
+        bbox = self.get_bbox()
+        # ... API logic using self._get_auth_headers() ...
+        return urls
 ```
 
-This method uses the helper method `get_bbox` to get the coordinates of the bounding box of the map area. If your DTM provider requires you to provide the coordinates in a different projection, you need to make sure you convert. For an example of this, see the `transform_bbox` method in [nrw.py](pydtmdl/providers/nrw.py).
-Then, it determines which tiles are needed, downloads them all to a temporary folder and extracts them. The base class provides a `_tile_directory` property for convenience that points to a temp folder for your provider.
-Finally, it returns a list of file paths to the downloaded tiles.
+### Key Helper Methods
 
-As you can see, it's pretty simple to implement a DTM provider. You can use any source of elevation data, as long as it's free and open.
-NOTE: If a DTM Provider requires an API key, paid subscription, or any other form of payment, you will be fully responsible for setting up your own access to the provider. The provider in the library will expose the settings needed to provide your authentication key or other required information.
+The base `DTMProvider` class provides several useful methods:
+
+- `get_bbox()` - Returns `(north, south, east, west)` in EPSG:4326
+- `download_tif_files(urls, output_path)` - Downloads and caches GeoTIFF files
+- `unzip_img_from_tif(file_name, output_path)` - Extracts .img or .tif from zip files
+- `_tile_directory` - Temporary directory for your provider's tiles
+
+For coordinate transformation, use the utility function from [pydtmdl/utils.py](pydtmdl/utils.py):
+```python
+from pydtmdl.utils import transform_bbox
+bbox = self.get_bbox()
+transformed_bbox = transform_bbox(bbox, "EPSG:25832")
+```
+
+### Requirements
+
+- Providers must be free and openly accessible
+- If authentication is required, users must provide their own credentials via settings
+- The `download_tiles()` method must return a list of file paths to GeoTIFF files
+- All tiles should contain valid elevation data readable by `rasterio`
 
 
