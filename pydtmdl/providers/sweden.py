@@ -26,7 +26,7 @@ class SwedenProvider(DTMProvider):
     _settings = SwedenProviderSettings
     _extents = [(69.086555, 55.279995, 24.097910, 10.674677)]
     _source_crs = "EPSG:5845"  # SWEREF99 16 30 + RH2000 height (native CRS of downloaded files)
-    
+
 
     _instructions = (
         "ℹ️ This provider requires username and password. See [here](https://geotorget.lantmateriet.se/geodataprodukter/markhojdmodell-nedladdning-api) to request access free of charge, then enter your credentials below."
@@ -42,7 +42,7 @@ class SwedenProvider(DTMProvider):
 
     def _get_auth_headers(self) -> dict[str, str]:
         """Get authentication headers for API requests.
-        
+
         Returns:
             dict: Dictionary with Authorization header.
         """
@@ -52,23 +52,23 @@ class SwedenProvider(DTMProvider):
             raise ValueError("Username is required for this provider.")
         if not self.user_settings.password:  # type: ignore
             raise ValueError("Password is required for this provider.")
-        
+
         credentials = f"{self.user_settings.username}:{self.user_settings.password}"  # type: ignore
         encoded_credentials = base64.b64encode(credentials.encode()).decode()
         return {"Authorization": f"Basic {encoded_credentials}"}
 
     def download_tif_files(self, urls: list[str], output_path: str) -> list[str]:
         """Download GeoTIFF files from the given URLs with authentication.
-        
+
         Arguments:
             urls (list): List of URLs to download GeoTIFF files from.
             output_path (str): Path to save the downloaded GeoTIFF files.
-            
+
         Returns:
             list: List of paths to the downloaded GeoTIFF files.
         """
         from tqdm import tqdm
-        
+
         tif_files: list[str] = []
         headers = self._get_auth_headers()
 
@@ -141,14 +141,14 @@ class SwedenProvider(DTMProvider):
                 "bbox": bbox_str,
                 "limit": "100",
             }
-            
+
             response = requests.get(  # pylint: disable=W3101
                 search_url,
                 params=request_params,
                 headers=headers,
                 timeout=60,
             )
-            
+
             # Check if the request was successful (HTTP status code 200)
             if response.status_code == 200:
                 # Parse the JSON response
@@ -162,4 +162,3 @@ class SwedenProvider(DTMProvider):
         except requests.exceptions.RequestException as e:
             self.logger.error("Failed to get data. Error: %s", e)
         return urls
-
