@@ -317,9 +317,9 @@ class DTMProvider(ABC):
         except RequestException as e:
             error_message = (
                 "Failed to download tiles from DTM provider servers. "
-                "It's probably happening because the requested area is outside of the providers "
+                "It's probably happening because the requested area is outside of the provider's "
                 "coverage area or the provider's servers are currently unavailable. "
-                "Please check the providers coverage and ensure that the coordinates you specified "
+                "Please check the provider's coverage and ensure that the coordinates you specified "
                 "are inside the coverage area. "
                 "You can also try different providers."
             )
