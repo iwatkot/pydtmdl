@@ -18,6 +18,7 @@ from pydantic import BaseModel
 from rasterio.enums import Resampling
 from rasterio.merge import merge
 from rasterio.warp import calculate_default_transform, reproject
+from requests.exceptions import HTTPError
 from tqdm import tqdm
 
 
@@ -302,12 +303,39 @@ class DTMProvider(ABC):
         Resulting array must be 16 bit (signed or unsigned) integer, and it should be already
         windowed to the bounding box of ROI. It also must have only one channel.
 
+        Raises:
+            RuntimeError: If downloading tiles failed.
+            ValueError: If no tiles were downloaded from the provider.
+
         Returns:
             np.ndarray: Numpy array of the tile.
         """
         # download tiles using DTM provider implementation
-        tiles = self.download_tiles()
-        self.logger.debug(f"Downloaded {len(tiles)} DEM tiles")
+
+        try:
+            tiles = self.download_tiles()
+        except HTTPError as e:
+            error_message = (
+                "Failed to download tiles from DTM provider servers. "
+                "It's probably happening because the requested area is outside of the providers "
+                "coverage area or the providers servers are currently unavailable. "
+                "Please check the providers coverage and ensure that the coordinates you specified "
+                "are inside the coverage area. "
+                "You can also try different providers."
+            )
+            self.logger.error(error_message)
+            raise RuntimeError(error_message) from e
+        self.logger.debug("Downloaded tiles: %s", tiles)
+
+        if not tiles:
+            error_message = (
+                "No tiles were downloaded from the provider. "
+                "The coordinates you provided are outside the coverage area of this provider, "
+                "and the provider does not have data for this area. "
+                "Try using a different provider."
+            )
+            self.logger.error(error_message)
+            raise ValueError(error_message)
 
         # merge tiles if necessary
         if len(tiles) > 1:

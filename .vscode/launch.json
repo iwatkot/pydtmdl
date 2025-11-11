@@ -12,5 +12,16 @@
         "PYTHONPATH": "${workspaceFolder}"
       }
     },
+        {
+      "name": "test.py",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/test.py",
+      "console": "integratedTerminal",
+      "justMyCode": true,
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}"
+      }
+    },
   ]
 }
