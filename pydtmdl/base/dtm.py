@@ -18,7 +18,7 @@ from pydantic import BaseModel
 from rasterio.enums import Resampling
 from rasterio.merge import merge
 from rasterio.warp import calculate_default_transform, reproject
-from requests.exceptions import HTTPError
+from requests.exceptions import RequestException
 from tqdm import tqdm
 
 
@@ -314,11 +314,11 @@ class DTMProvider(ABC):
 
         try:
             tiles = self.download_tiles()
-        except HTTPError as e:
+        except RequestException as e:
             error_message = (
                 "Failed to download tiles from DTM provider servers. "
                 "It's probably happening because the requested area is outside of the providers "
-                "coverage area or the providers servers are currently unavailable. "
+                "coverage area or the provider's servers are currently unavailable. "
                 "Please check the providers coverage and ensure that the coordinates you specified "
                 "are inside the coverage area. "
                 "You can also try different providers."
