@@ -3,6 +3,7 @@ from pydtmdl.providers.arctic import ArcticProvider
 from pydtmdl.providers.baden import BadenWurttembergProvider
 from pydtmdl.providers.bavaria import BavariaProvider
 from pydtmdl.providers.canada import CanadaProvider
+from pydtmdl.providers.czech_dmr5g import CzechProviderDMR5G
 from pydtmdl.providers.czech import CzechProvider
 from pydtmdl.providers.denmark import DenmarkProvider
 from pydtmdl.providers.england import England1MProvider
