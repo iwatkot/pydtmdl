@@ -1,7 +1,5 @@
 """This module contains provider of Czech data."""
 
-from typing import List
-
 import requests
 
 from pydtmdl.base.dtm import DTMProvider
@@ -25,11 +23,9 @@ class CzechProviderDMR5G(DTMProvider):
         )
     ]
     _max_tile_size = 4096
-    _url = (
-        "https://ags.cuzk.cz/arcgis2/rest/services/dmr5g/ImageServer/exportImage"
-    )
+    _url = "https://ags.cuzk.cz/arcgis2/rest/services/dmr5g/ImageServer/exportImage"
 
-    def download_tiles(self) -> List[str]:
+    def download_tiles(self) -> list[str]:
         """Download DTM tiles for Czech Republic."""
         bbox = self.get_bbox()
         grid_size = max(1, self.size // self._max_tile_size)
@@ -52,8 +48,9 @@ class CzechProviderDMR5G(DTMProvider):
             }
 
             response = requests.get(
-                self.url, params=params, verify=None, timeout=60  # type: ignore
+                self.url, params=params, verify=False, timeout=60  # type: ignore
             )
+            response.raise_for_status()
             data = response.json()
             if "href" not in data:
                 raise RuntimeError(f"No image URL in response for tile {i}")
