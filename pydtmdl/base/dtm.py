@@ -44,6 +44,8 @@ class DTMProvider(ABC):
 
     _instructions: str | None = None
 
+    _unreliable: bool = False
+
     def __init__(
         self,
         coordinates: tuple[float, float],
@@ -71,6 +73,15 @@ class DTMProvider(ABC):
             float: Provider resolution.
         """
         return cls._resolution
+
+    @classmethod
+    def unreliable(cls) -> bool:
+        """Check if the provider is unreliable.
+
+        Returns:
+            bool: True if the provider is unreliable, False otherwise.
+        """
+        return cls._unreliable
 
     @classmethod
     def name(cls) -> str | None:
@@ -246,11 +257,14 @@ class DTMProvider(ABC):
         return [provider for provider in cls.__subclasses__() if provider not in base_providers]
 
     @classmethod
-    def get_list(cls, lat_lon: tuple[float, float]) -> list[Type[DTMProvider]]:
+    def get_list(
+        cls, lat_lon: tuple[float, float], include_unreliable: bool = False
+    ) -> list[Type[DTMProvider]]:
         """Get all providers that can be used for the given coordinates.
 
         Arguments:
             lat_lon (tuple): Latitude and longitude of the center point.
+            include_unreliable (bool): Whether to include unreliable providers.
 
         Returns:
             list: List of provider classes.
@@ -258,6 +272,8 @@ class DTMProvider(ABC):
         providers = []
         for provider in cls.get_non_base_providers():
             if provider.inside_bounding_box(lat_lon):
+                if not include_unreliable and provider.unreliable():
+                    continue
                 providers.append(provider)
         return providers
 
