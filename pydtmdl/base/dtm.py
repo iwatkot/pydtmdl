@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 from abc import ABC, abstractmethod
 from typing import Any, Type
 from zipfile import ZipFile
@@ -45,6 +46,9 @@ class DTMProvider(ABC):
     _instructions: str | None = None
 
     _unreliable: bool = False
+
+    _max_retries: int = 5
+    _retry_pause: int = 5
 
     def __init__(
         self,
@@ -348,7 +352,7 @@ class DTMProvider(ABC):
                 "are inside the coverage area. "
                 "You can also try different providers."
             )
-            self.logger.error(error_message)
+            self.logger.error(f"Error while downloading tiles: {e}")
             raise RuntimeError(error_message) from e
         self.logger.debug("Downloaded tiles: %s", tiles)
 
@@ -448,28 +452,54 @@ class DTMProvider(ABC):
             initial=len(tif_files),
             total=len(urls),
         ):
-            try:
-                file_name = os.path.basename(url)
-                file_path = os.path.join(output_path, file_name)
-                self.logger.debug("Retrieving TIFF: %s", file_name)
+            file_name = os.path.basename(url)
+            file_path = os.path.join(output_path, file_name)
 
-                # Send a GET request to the file URL
-                response = requests.get(url, stream=True, timeout=timeout, headers=headers)
-                response.raise_for_status()  # Raise an error for HTTP status codes 4xx/5xx
+            # Retry logic
+            for attempt in range(self._max_retries):
+                try:
+                    self.logger.debug(
+                        "Retrieving TIFF: %s (attempt %d/%d)",
+                        file_name,
+                        attempt + 1,
+                        self._max_retries,
+                    )
 
-                # Write the content of the response to the file
-                with open(file_path, "wb") as file:
-                    for chunk in response.iter_content(chunk_size=8192):
-                        file.write(chunk)
+                    # Send a GET request to the file URL
+                    response = requests.get(url, stream=True, timeout=timeout, headers=headers)
+                    response.raise_for_status()  # Raise an error for HTTP status codes 4xx/5xx
 
-                self.logger.debug("File downloaded successfully: %s", file_path)
+                    # Write the content of the response to the file
+                    with open(file_path, "wb") as file:
+                        for chunk in response.iter_content(chunk_size=8192):
+                            file.write(chunk)
 
-                if file_name.endswith(".zip"):
-                    file_path = self.unzip_img_from_tif(file_name, output_path)
+                    self.logger.debug("File downloaded successfully: %s", file_path)
 
-                tif_files.append(file_path)
-            except requests.exceptions.RequestException as e:
-                self.logger.error("Failed to download file from %s: %s", url, e)
+                    if file_name.endswith(".zip"):
+                        file_path = self.unzip_img_from_tif(file_name, output_path)
+
+                    tif_files.append(file_path)
+                    break  # Success, exit retry loop
+
+                except requests.exceptions.RequestException as e:
+                    if attempt < self._max_retries - 1:
+                        self.logger.warning(
+                            "Failed to download file from %s (attempt %d/%d): %s. Retrying in %d seconds...",
+                            url,
+                            attempt + 1,
+                            self._max_retries,
+                            e,
+                            self._retry_pause,
+                        )
+                        time.sleep(self._retry_pause)
+                    else:
+                        self.logger.error(
+                            "Failed to download file from %s after %d attempts: %s",
+                            url,
+                            self._max_retries,
+                            e,
+                        )
         return tif_files
 
     def download_file(
@@ -494,33 +524,67 @@ class DTMProvider(ABC):
         Returns:
             bool: True if download was successful, False otherwise.
         """
-        try:
-            self.logger.debug("Downloading file from %s to %s", url, output_path)
-
-            if method.upper() == "POST":
-                response = requests.post(
-                    url, data=data, headers=headers, stream=True, timeout=timeout
+        # Retry logic
+        for attempt in range(self._max_retries):
+            try:
+                self.logger.debug(
+                    "Downloading file from %s to %s (attempt %d/%d)",
+                    url,
+                    output_path,
+                    attempt + 1,
+                    self._max_retries,
                 )
-            else:
-                response = requests.get(url, headers=headers, stream=True, timeout=timeout)
 
-            if response.status_code == 200:
-                with open(output_path, "wb") as file:
-                    for chunk in response.iter_content(chunk_size=8192):
-                        file.write(chunk)
-                self.logger.debug("File downloaded successfully: %s", output_path)
-                return True
+                if method.upper() == "POST":
+                    response = requests.post(
+                        url, data=data, headers=headers, stream=True, timeout=timeout
+                    )
+                else:
+                    response = requests.get(url, headers=headers, stream=True, timeout=timeout)
 
-            self.logger.error(
-                "Download failed. HTTP Status Code: %s for URL: %s",
-                response.status_code,
-                url,
-            )
-            return False
+                if response.status_code == 200:
+                    with open(output_path, "wb") as file:
+                        for chunk in response.iter_content(chunk_size=8192):
+                            file.write(chunk)
+                    self.logger.debug("File downloaded successfully: %s", output_path)
+                    return True
 
-        except requests.exceptions.RequestException as e:
-            self.logger.error("Failed to download file from %s: %s", url, e)
-            return False
+                self.logger.warning(
+                    "Download failed. HTTP Status Code: %s for URL: %s",
+                    response.status_code,
+                    url,
+                )
+
+                if attempt < self._max_retries - 1:
+                    self.logger.warning("Retrying in %d seconds...", self._retry_pause)
+                    time.sleep(self._retry_pause)
+                else:
+                    self.logger.error(
+                        "Failed to download file from %s after %d attempts", url, self._max_retries
+                    )
+                    return False
+
+            except requests.exceptions.RequestException as e:
+                if attempt < self._max_retries - 1:
+                    self.logger.warning(
+                        "Failed to download file from %s (attempt %d/%d): %s. Retrying in %d seconds...",
+                        url,
+                        attempt + 1,
+                        self._max_retries,
+                        e,
+                        self._retry_pause,
+                    )
+                    time.sleep(self._retry_pause)
+                else:
+                    self.logger.error(
+                        "Failed to download file from %s after %d attempts: %s",
+                        url,
+                        self._max_retries,
+                        e,
+                    )
+                    return False
+
+        return False
 
     def download_tiles_with_fetcher(
         self,
@@ -558,15 +622,43 @@ class DTMProvider(ABC):
             file_path = os.path.join(output_path, file_name)
 
             if not os.path.exists(file_path):
-                try:
-                    self.logger.debug("Fetching tile: %s", tile)
-                    output = data_fetcher(tile)
-                    with open(file_path, "wb") as f:
-                        f.write(output.read() if hasattr(output, "read") else output)
-                    self.logger.debug("Tile downloaded successfully: %s", file_path)
-                except Exception as e:
-                    self.logger.error("Failed to download tile %s: %s", tile, e)
-                    continue
+                # Retry logic
+                success = False
+                for attempt in range(self._max_retries):
+                    try:
+                        self.logger.debug(
+                            "Fetching tile: %s (attempt %d/%d)",
+                            tile,
+                            attempt + 1,
+                            self._max_retries,
+                        )
+                        output = data_fetcher(tile)
+                        with open(file_path, "wb") as f:
+                            f.write(output.read() if hasattr(output, "read") else output)
+                        self.logger.debug("Tile downloaded successfully: %s", file_path)
+                        success = True
+                        break  # Success, exit retry loop
+                    except Exception as e:
+                        if attempt < self._max_retries - 1:
+                            self.logger.warning(
+                                "Failed to download tile %s (attempt %d/%d): %s. Retrying in %d seconds...",
+                                tile,
+                                attempt + 1,
+                                self._max_retries,
+                                e,
+                                self._retry_pause,
+                            )
+                            time.sleep(self._retry_pause)
+                        else:
+                            self.logger.error(
+                                "Failed to download tile %s after %d attempts: %s",
+                                tile,
+                                self._max_retries,
+                                e,
+                            )
+
+                if not success:
+                    continue  # Skip this tile if all retries failed
             else:
                 self.logger.debug("File already exists: %s", file_name)
 
