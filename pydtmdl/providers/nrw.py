@@ -21,7 +21,7 @@ class NRWProvider(WCSProvider, DTMProvider):
 
     def get_wcs_parameters(self, tile: tuple[float, float, float, float]) -> dict:
         return {
-            "identifier": ["nw_dgm"],
+            "identifier": "nw_dgm",
             "subsets": [("y", str(tile[0]), str(tile[2])), ("x", str(tile[1]), str(tile[3]))],
             "format": "image/tiff",
         }

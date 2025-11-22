@@ -100,6 +100,3 @@ def test_all_providers():
             print(f"{provider._name}: Test passed for size {size}.")
 
     print("All providers without settings passed the tests.")
-
-
-test_all_providers()

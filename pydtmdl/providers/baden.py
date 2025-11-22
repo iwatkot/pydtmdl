@@ -21,7 +21,7 @@ class BadenWurttembergProvider(WCSProvider, DTMProvider):
 
     def get_wcs_parameters(self, tile):
         return {
-            "identifier": ["EL.ElevationGridCoverage"],
+            "identifier": "EL.ElevationGridCoverage",
             "subsets": [("E", str(tile[1]), str(tile[3])), ("N", str(tile[0]), str(tile[2]))],
             "format": "image/tiff",
         }

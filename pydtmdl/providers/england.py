@@ -21,7 +21,7 @@ class England1MProvider(WCSProvider, DTMProvider):
 
     def get_wcs_parameters(self, tile):
         return {
-            "identifier": ["13787b9a-26a4-4775-8523-806d13af58fc:Lidar_Composite_Elevation_DTM_1m"],
+            "identifier": "13787b9a-26a4-4775-8523-806d13af58fc:Lidar_Composite_Elevation_DTM_1m",
             "subsets": [("E", str(tile[1]), str(tile[3])), ("N", str(tile[0]), str(tile[2]))],
             "format": "tiff",
         }

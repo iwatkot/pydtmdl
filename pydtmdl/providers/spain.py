@@ -23,7 +23,7 @@ class SpainProvider(WCSProvider, DTMProvider):
 
     def get_wcs_parameters(self, tile: tuple[float, float, float, float]) -> dict:
         return {
-            "identifier": ["Elevacion25830_5"],
+            "identifier": "Elevacion25830_5",
             "subsets": [("y", str(tile[0]), str(tile[2])), ("x", str(tile[1]), str(tile[3]))],
             "format": "GEOTIFFINT16",
             "timeout": 600,

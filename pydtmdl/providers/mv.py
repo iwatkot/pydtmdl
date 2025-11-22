@@ -36,7 +36,7 @@ class MecklenburgVorpommernProvider(WCSProvider, DTMProvider):
         if not self.user_settings.dataset:
             raise ValueError("Dataset is required for this provider.")
         return {
-            "identifier": [self.user_settings.dataset],
+            "identifier": self.user_settings.dataset,
             "subsets": [("x", str(tile[1]), str(tile[3])), ("y", str(tile[0]), str(tile[2]))],
             "format": "image/tiff",
         }
