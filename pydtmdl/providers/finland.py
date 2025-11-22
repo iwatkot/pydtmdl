@@ -48,7 +48,7 @@ class FinlandProvider(WCSProvider, DTMProvider):
 
     def get_wcs_parameters(self, tile: tuple[float, float, float, float]) -> dict:
         return {
-            "identifier": ["korkeusmalli_2m"],
+            "identifier": "korkeusmalli_2m",
             "subsets": [("N", str(tile[0]), str(tile[2])), ("E", str(tile[1]), str(tile[3]))],
             "format": "image/tiff",
             "timeout": 600,

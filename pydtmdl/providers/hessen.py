@@ -21,7 +21,7 @@ class HessenProvider(WCSProvider, DTMProvider):
 
     def get_wcs_parameters(self, tile: tuple[float, float, float, float]) -> dict:
         return {
-            "identifier": ["he_dgm1"],
+            "identifier": "he_dgm1",
             "subsets": [("N", str(tile[0]), str(tile[2])), ("E", str(tile[1]), str(tile[3]))],
             "format": "image/gtiff",
             "timeout": 600,

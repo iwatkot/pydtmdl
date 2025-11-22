@@ -52,9 +52,7 @@ class LithuaniaProvider(DTMProvider):
                 "size": f"{self._max_tile_size},{self._max_tile_size}",
             }
 
-            response = requests.get(
-                self.url, params=params, verify=False, timeout=60  # type: ignore
-            )
+            response = requests.get(self.url, params=params, timeout=60)  # type: ignore
             data = response.json()
             if "href" not in data:
                 raise RuntimeError(f"No image URL in response for tile {i}")

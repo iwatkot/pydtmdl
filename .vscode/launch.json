@@ -13,10 +13,10 @@
       }
     },
         {
-      "name": "test.py",
+      "name": "Tests",
       "type": "debugpy",
       "request": "launch",
-      "program": "${workspaceFolder}/test.py",
+      "program": "${workspaceFolder}/tests/test_providers.py",
       "console": "integratedTerminal",
       "justMyCode": true,
       "env": {

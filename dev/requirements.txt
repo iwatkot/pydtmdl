@@ -8,3 +8,4 @@ owslib
 mypy
 pylint
 types-requests
+pytest

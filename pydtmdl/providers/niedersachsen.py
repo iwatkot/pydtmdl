@@ -24,6 +24,8 @@ class NiedersachsenProvider(WMSProvider, DTMProvider):
     _tile_size = 2000
     _wms_version = "1.3.0"
 
+    _unreliable = True  # Always returns incorrect type of data (8-bit).
+
     def get_wms_parameters(self, tile):
         return {
             "layers": ["ni_dgm1_grau"],

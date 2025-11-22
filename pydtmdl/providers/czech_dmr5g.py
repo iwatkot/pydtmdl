@@ -47,9 +47,7 @@ class CzechProviderDMR5G(DTMProvider):
                 "size": f"{self._max_tile_size},{self._max_tile_size}",
             }
 
-            response = requests.get(
-                self.url, params=params, verify=False, timeout=60  # type: ignore
-            )
+            response = requests.get(self.url, params=params, timeout=60)  # type: ignore
             response.raise_for_status()
             data = response.json()
             if "href" not in data:
