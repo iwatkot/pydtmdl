@@ -5,8 +5,6 @@ import math
 import os
 import shutil
 
-import requests
-
 from pydtmdl.base.dtm import DTMProvider
 
 
@@ -62,13 +60,7 @@ class SRTM30Provider(DTMProvider):
             bool: True if the tile was downloaded successfully, False otherwise.
         """
         url = self.formatted_url(**kwargs)
-        response = requests.get(url, stream=True, timeout=10)
-        if response.status_code == 200:
-            with open(output_path, "wb") as file:
-                for chunk in response.iter_content(chunk_size=1024):
-                    file.write(chunk)
-            return True
-        return False
+        return self.download_file(url, output_path, timeout=10)
 
     def get_or_download_tile(self, output_path: str, **kwargs) -> str | None:
         """Get or download a tile from the provider.

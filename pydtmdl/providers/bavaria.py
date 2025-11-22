@@ -4,8 +4,6 @@ import hashlib
 import os
 from xml.etree import ElementTree as ET
 
-import requests
-
 from pydtmdl.base.dtm import DTMProvider
 
 
@@ -61,29 +59,17 @@ class BavariaProvider(DTMProvider):
         (north, south, east, west) = self.get_bbox()
         file_path = os.path.join(self.meta4_path, self.get_meta_file_name(north, south, east, west))
         if not os.path.exists(file_path):
-            try:
-                # Make the GET request
-                response = requests.post(
-                    "https://geoservices.bayern.de/services/poly2metalink/metalink/dgm1",
-                    (
-                        f"SRID=4326;POLYGON(({west} {south},{east} {south},"
-                        f"{east} {north},{west} {north},{west} {south}))"
-                    ),
-                    stream=True,
-                    timeout=60,
-                )
-
-                # Check if the request was successful (HTTP status code 200)
-                if response.status_code == 200:
-                    # Write the content of the response to the file
-                    with open(file_path, "wb") as meta_file:
-                        for chunk in response.iter_content(chunk_size=8192):  # Download in chunks
-                            meta_file.write(chunk)
-                    self.logger.debug("File downloaded successfully: %s", file_path)
-                else:
-                    self.logger.error("Download error. HTTP Status Code: %s", response.status_code)
-            except requests.exceptions.RequestException as e:
-                self.logger.error("Failed to get data. Error: %s", e)
+            # Use unified download method
+            data = (
+                f"SRID=4326;POLYGON(({west} {south},{east} {south},"
+                f"{east} {north},{west} {north},{west} {south}))"
+            )
+            self.download_file(
+                url="https://geoservices.bayern.de/services/poly2metalink/metalink/dgm1",
+                output_path=file_path,
+                method="POST",
+                data=data,
+            )
         else:
             self.logger.debug("File already exists: %s", file_path)
         return self.extract_urls_from_xml(file_path)

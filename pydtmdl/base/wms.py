@@ -2,9 +2,9 @@
 
 import os
 from abc import abstractmethod
+from typing import Any
 
 from owslib.wms import WebMapService
-from tqdm import tqdm
 
 from pydtmdl import utils
 from pydtmdl.base.dtm import DTMProvider
@@ -39,32 +39,16 @@ class WMSProvider(DTMProvider):
         bbox = utils.transform_bbox(bbox, self._source_crs)
         tiles = utils.tile_bbox(bbox, self._tile_size)
 
-        all_tif_files = self.download_all_tiles(tiles)
-        return all_tif_files
-
-    def download_all_tiles(self, tiles: list[tuple[float, float, float, float]]) -> list[str]:
-        """Download tiles from the WMS provider.
-
-        Arguments:
-            tiles (list): List of tiles to download.
-
-        Returns:
-            list: List of paths to the downloaded GeoTIFF files.
-        """
-        all_tif_files = []
+        # Create WMS instance once
         wms = WebMapService(
             self._url,
             version=self._wms_version,
             # auth=Authentication(verify=False),
             timeout=600,
         )
-        for tile in tqdm(tiles, desc="Downloading tiles", unit="tile"):
-            file_name = "_".join(map(str, tile)) + ".tif"
-            file_path = os.path.join(self.shared_tiff_path, file_name)
-            if not os.path.exists(file_path):
-                output = wms.getmap(**self.get_wms_parameters(tile))
-                with open(file_path, "wb") as f:
-                    f.write(output.read())
 
-            all_tif_files.append(file_path)
-        return all_tif_files
+        # Use unified download method with WMS data fetcher
+        def wms_fetcher(tile: tuple[float, float, float, float]) -> Any:
+            return wms.getmap(**self.get_wms_parameters(tile))
+
+        return self.download_tiles_with_fetcher(tiles, self.shared_tiff_path, wms_fetcher)
