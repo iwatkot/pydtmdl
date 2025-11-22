@@ -2,3 +2,4 @@ __pycache__/
 .venv/
 tiles/
 test.py
+output.png

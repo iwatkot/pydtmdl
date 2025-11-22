@@ -64,6 +64,15 @@ class DTMProvider(ABC):
         self.logger = logger
 
     @classmethod
+    def resolution(cls) -> float | None:
+        """Resolution of the provider in meters per pixel.
+
+        Returns:
+            float: Provider resolution.
+        """
+        return cls._resolution
+
+    @classmethod
     def name(cls) -> str | None:
         """Name of the provider.
 
