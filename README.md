@@ -288,14 +288,75 @@ class SwedenProvider(DTMProvider):
         return urls
 ```
 
-### Key Helper Methods
+### Unified Download Methods
 
-The base `DTMProvider` class provides several useful methods:
+⚠️ **Important**: All DTM providers **must use** the unified download methods provided by the base `DTMProvider` class. Do not implement your own download logic.
+
+The base class provides three unified download methods with built-in retry logic, error handling, and progress tracking:
+
+#### 1. `download_tif_files(urls, output_path, headers=None, timeout=60)`
+For downloading multiple GeoTIFF files from a list of URLs.
+
+```python
+def download_tiles(self) -> list[str]:
+    download_urls = self.get_download_urls()
+    return self.download_tif_files(download_urls, self.shared_tiff_path)
+```
+
+**Use for**: Simple URL-based downloads (SRTM, Scotland, Wales, etc.)
+
+#### 2. `download_file(url, output_path, headers=None, method='GET', data=None, timeout=60)`
+For downloading a single file with flexible HTTP methods (GET/POST).
+
+```python
+def download_tiles(self) -> list[str]:
+    url = self.formatted_url(**tile_parameters)
+    output_path = os.path.join(self._tile_directory, "tile.tif")
+    self.download_file(url, output_path, method="POST", data=polygon_data)
+    return [output_path]
+```
+
+**Use for**: Single file downloads or POST requests (Bavaria, custom APIs)
+
+#### 3. `download_tiles_with_fetcher(tiles, output_path, data_fetcher, file_name_generator=None)`
+For OGC Web Services (WCS/WMS) or any service requiring custom data fetching.
+
+```python
+def download_tiles(self) -> list[str]:
+    bbox = self.get_bbox()
+    bbox = transform_bbox(bbox, self._source_crs)
+    tiles = tile_bbox(bbox, self._tile_size)
+    
+    wcs = WebCoverageService(self._url, version=self._wcs_version)
+    
+    def wcs_fetcher(tile):
+        return wcs.getCoverage(**self.get_wcs_parameters(tile))
+    
+    return self.download_tiles_with_fetcher(tiles, self.shared_tiff_path, wcs_fetcher)
+```
+
+**Use for**: WCS/WMS providers (automatically handled by `WCSProvider`/`WMSProvider` base classes)
+
+#### Why Use Unified Methods?
+
+- ✅ **Built-in retry logic** - Automatic retries with configurable attempts and delays
+- ✅ **Error handling** - Consistent error messages and logging
+- ✅ **Progress tracking** - Visual progress bars with tqdm
+- ✅ **File caching** - Skips already downloaded files
+- ✅ **Timeout support** - Configurable timeouts for slow connections
+- ✅ **Authentication** - Support for custom headers (API keys, Basic Auth, etc.)
+
+**If you need functionality not provided by these methods, extend the base class methods rather than implementing your own. This ensures all providers benefit from improvements and bug fixes.**
+
+### Other Helper Methods
+
+The base `DTMProvider` class also provides:
 
 - `get_bbox()` - Returns `(north, south, east, west)` in EPSG:4326
-- `download_tif_files(urls, output_path)` - Downloads and caches GeoTIFF files
 - `unzip_img_from_tif(file_name, output_path)` - Extracts .img or .tif from zip files
 - `_tile_directory` - Temporary directory for your provider's tiles
+- `_max_retries` - Number of retry attempts (default: 5)
+- `_retry_pause` - Seconds between retries (default: 5)
 
 For coordinate transformation, use the utility function from [pydtmdl/utils.py](pydtmdl/utils.py):
 ```python

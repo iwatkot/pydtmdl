@@ -83,6 +83,29 @@ All methods, functions and classes must have type hints (including generic types
 
 If you're interested in adding a new DTM provider, please refer to the [Contributing section in the README](README.md#contributing) for detailed instructions on how to implement a DTM provider.
 
+### ⚠️ Critical Requirements for DTM Providers
+
+When adding a new DTM provider, you **must** follow these requirements:
+
+1. **Use Unified Download Methods**: All providers must use one of the three unified download methods provided by the base `DTMProvider` class:
+   - `download_tif_files()` - For URL-based downloads
+   - `download_file()` - For single file downloads (GET/POST)
+   - `download_tiles_with_fetcher()` - For OGC services (WCS/WMS)
+
+2. **Do Not Implement Custom Download Logic**: Do not use `requests` directly or implement your own download/retry logic. The unified methods provide:
+   - Automatic retry logic with configurable attempts
+   - Consistent error handling and logging
+   - Progress tracking with tqdm
+   - File caching
+   - Timeout support
+   - Authentication support
+
+3. **Extend, Don't Replace**: If you need functionality not provided by the unified methods, **extend the base class methods** rather than implementing your own. This ensures all providers benefit from improvements.
+
+4. **Follow Existing Patterns**: Review similar providers in [pydtmdl/providers/](https://github.com/iwatkot/pydtmdl/tree/main/pydtmdl/providers) to understand the correct implementation patterns.
+
+**Pull requests that implement custom download logic will not be accepted.** This requirement ensures maintainability, consistency, and reliability across all providers.
+
 ## Submitting a Pull Request
 
 Once you have made your changes and tested them, you can submit a [pull request](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/proposing-changes-to-your-work-with-pull-requests/creating-a-pull-request) to the repository.
