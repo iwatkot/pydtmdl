@@ -26,6 +26,8 @@ class ArcticProvider(DTMProvider):
 
     _url = "https://stac.pgc.umn.edu/api/v1/collections/arcticdem-mosaics-v4.1-2m/items"
 
+    _unreliable = True
+
     def download_tiles(self):
         download_urls = self.get_download_urls()
         all_tif_files = self.download_tif_files(download_urls, self.shared_tiff_path)
