@@ -2,6 +2,7 @@ import os
 import shutil
 
 import numpy as np
+import pytest
 
 from pydtmdl import DTMProvider
 
@@ -82,21 +83,23 @@ def get_all_providers_without_settings() -> list[DTMProvider]:
     return providers_without_settings
 
 
-def test_all_providers():
-    """Test all providers without settings."""
-    providers_without_settings = get_all_providers_without_settings()
-    for provider in providers_without_settings:
-        coordinate_case = COORDINATE_CASES.get(provider._code)
-        print(f"Testing provider: {provider._code}, coordinate case: {coordinate_case}")
-        if not coordinate_case:
-            print(f"Skipping provider {provider._code} as no coordinate case is defined.")
-            continue
+def _build_test_cases() -> list[tuple]:
+    cases = []
+    for provider in get_all_providers_without_settings():
+        coord = COORDINATE_CASES.get(provider._code)
+        if coord:
+            for size in SIZE_CASES:
+                cases.append((provider, coord, size))
+    return cases
 
-        for size in SIZE_CASES:
-            testing_provider = provider(coordinate_case, size=size)
 
-            array = testing_provider.get_numpy()
-            verify_provder_output(array, provider._name)
-            print(f"{provider._name}: Test passed for size {size}.")
+_TEST_CASES = _build_test_cases()
+_TEST_IDS = [f"{p._code}-{s}" for p, _, s in _TEST_CASES]
 
-    print("All providers without settings passed the tests.")
+
+@pytest.mark.parametrize("provider,coordinate,size", _TEST_CASES, ids=_TEST_IDS)
+def test_provider(provider, coordinate, size):
+    """Test a single DTM provider."""
+    testing_provider = provider(coordinate, size=size)
+    array = testing_provider.get_numpy()
+    verify_provder_output(array, provider._name)

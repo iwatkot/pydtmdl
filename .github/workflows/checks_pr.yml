@@ -35,4 +35,4 @@ jobs:
         run: pylint pydtmdl
 
       - name: Run tests
-        run: pytest
+        run: pytest -v
