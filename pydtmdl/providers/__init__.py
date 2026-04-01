@@ -27,3 +27,5 @@ from pydtmdl.providers.switzerland import SwitzerlandProvider
 from pydtmdl.providers.thuringia import ThuringiaProvider
 from pydtmdl.providers.usgs_wcs import USGSWCSProvider
 from pydtmdl.providers.wales import WalesProvider
+from pydtmdl.providers.austria import AustriaProvider
+
