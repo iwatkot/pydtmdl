@@ -691,6 +691,11 @@ class DTMProvider(ABC):
             provider_class = cls
 
         if provider_class is None:
+            if provider_code:
+                raise ProviderUnavailableError(
+                    f"No provider is available for the requested provider_code: {provider_code!r}.",
+                    provider_code=provider_code,
+                )
             raise ProviderUnavailableError("No provider is available for the requested geometry.")
 
         provider = provider_class(
@@ -1208,8 +1213,12 @@ class DTMProvider(ABC):
         """Resolve the requested ROI dimensions while preserving legacy size support."""
         resolved_width = width_m if width_m is not None else size
         resolved_height = height_m if height_m is not None else size
+        if resolved_width is None and resolved_height is not None:
+            resolved_width = resolved_height
+        elif resolved_height is None and resolved_width is not None:
+            resolved_height = resolved_width
         if resolved_width is None or resolved_height is None:
-            raise ValueError("Either size or both width_m and height_m must be provided.")
+            raise ValueError("Either size or width_m/height_m must be provided.")
         if resolved_width <= 0 or resolved_height <= 0:
             raise ValueError("Requested ROI dimensions must be positive integers.")
         return int(resolved_width), int(resolved_height)

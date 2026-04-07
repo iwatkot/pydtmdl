@@ -9,7 +9,7 @@ import rasterio
 import requests
 from rasterio.transform import from_bounds
 
-from pydtmdl import DownloadFailedError, DTMProvider
+from pydtmdl import DownloadFailedError, DTMProvider, ProviderUnavailableError
 
 _PROVIDER_COUNTER = count()
 
@@ -76,6 +76,19 @@ def test_provider_size_backwards_compatibility(tmp_path: Path):
     provider_class, _ = _make_static_provider(source_path, provider_code)
 
     provider = provider_class((0.0, 0.0), size=1024, directory=str(tmp_path))
+
+    assert provider.size == 1024
+    assert provider.width_m == 1024
+    assert provider.height_m == 1024
+    assert provider.rotation_deg == 0.0
+
+
+def test_provider_width_only_preserves_square_behavior(tmp_path: Path):
+    source_path = _write_test_raster(tmp_path / "source_width_only.tif")
+    provider_code = _next_code("width_only")
+    provider_class, _ = _make_static_provider(source_path, provider_code)
+
+    provider = provider_class((0.0, 0.0), width_m=1024, directory=str(tmp_path))
 
     assert provider.size == 1024
     assert provider.width_m == 1024
@@ -165,3 +178,17 @@ def test_extract_area_raises_machine_readable_error_without_fallback(tmp_path: P
         )
 
     assert exc_info.value.to_details().error_type == "download_failed"
+
+
+def test_extract_area_invalid_provider_code_reports_requested_code(tmp_path: Path):
+    with pytest.raises(ProviderUnavailableError) as exc_info:
+        DTMProvider.extract_area(
+            center=(0.0, 0.0),
+            width_m=1200,
+            provider_code="missing_provider",
+            directory=str(tmp_path),
+        )
+
+    assert exc_info.value.provider_code == "missing_provider"
+    assert exc_info.value.to_details().error_type == "provider_unavailable"
+    assert "missing_provider" in str(exc_info.value)
