@@ -3,8 +3,8 @@ rasterio
 requests
 pydantic
 tqdm
-osmnx
 owslib
+pyproj
 mypy
 pylint
 types-requests

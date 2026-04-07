@@ -56,9 +56,22 @@ except ValueError as e:
 print(f"Data shape: {np_data.shape}, type: {np_data.dtype}")
 print(f"Data min: {np_data.min()}, max: {np_data.max()}")
 
+# Optional: use the high-level rectangular ROI API with structured metadata.
+result = DTMProvider.extract_area(
+    center=coords,
+    width_m=4096,
+    height_m=2048,
+    rotation_deg=30,
+    provider_code=best_provider.code(),
+    fallback_provider_code="srtm30",
+)
+print(result.metadata.model_dump())
+
 # Convert to 8-bit unsigned integer and resize for visualization.
 np_data = cv2.normalize(np_data, None, 0, 255, cv2.NORM_MINMAX).astype("uint8")
 np_data = cv2.resize(np_data, (size, size), interpolation=cv2.INTER_LINEAR)
+roi_preview = cv2.normalize(result.data.filled(0), None, 0, 255, cv2.NORM_MINMAX).astype("uint8")
 
 # Save the processed data to a file.
 cv2.imwrite("output.png", np_data)
+cv2.imwrite("output_roi.png", roi_preview)
