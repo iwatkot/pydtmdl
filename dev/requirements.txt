@@ -3,7 +3,6 @@ rasterio
 requests
 pydantic
 tqdm
-osmnx
 owslib
 pyproj
 mypy

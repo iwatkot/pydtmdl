@@ -22,7 +22,6 @@ dependencies = [
     "requests",
     "pydantic",
     "tqdm",
-    "osmnx",
     "owslib",
     "pyproj"
 ]
