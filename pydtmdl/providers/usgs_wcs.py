@@ -1,5 +1,7 @@
 """This module contains provider of USGS data."""
 
+import math
+
 from pydtmdl.base.dtm import DTMProvider
 from pydtmdl.base.wcs import WCSProvider
 
@@ -21,11 +23,13 @@ class USGSWCSProvider(WCSProvider, DTMProvider):
     _is_multipart = False
 
     def get_wcs_parameters(self, tile):
+        width = max(1, math.ceil(abs(tile[3] - tile[1]) / (self.resolution() or 1.0)))
+        height = max(1, math.ceil(abs(tile[2] - tile[0]) / (self.resolution() or 1.0)))
         return {
             "identifier": "DEP3Elevation",
             "bbox": (tile[1], tile[0], tile[3], tile[2]),
             "crs": "EPSG:3857",
-            "width": 1000,
-            "height": 1000,
+            "width": width,
+            "height": height,
             "format": "GeoTIFF",
         }

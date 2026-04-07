@@ -4,19 +4,24 @@ and specific settings for downloading and processing the data."""
 
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
+import math
 import os
 import time
 from abc import ABC, abstractmethod
-from typing import Any, Type
+from dataclasses import dataclass
+from typing import Any, Type, cast
 from zipfile import ZipFile
 
 import numpy as np
-import osmnx as ox
 import rasterio
 import requests
 from pydantic import BaseModel
+from pyproj import CRS, Transformer
 from rasterio.enums import Resampling
+from rasterio.mask import mask
 from rasterio.merge import merge
 from rasterio.warp import calculate_default_transform, reproject
 from requests.exceptions import RequestException
@@ -25,6 +30,117 @@ from tqdm import tqdm
 
 class DTMProviderSettings(BaseModel):
     """Base class for DTM provider settings models."""
+
+
+class DTMErrorDetails(BaseModel):
+    """Machine-readable error details for DTM provider failures."""
+
+    error_type: str
+    message: str
+    provider_code: str | None = None
+    provider_name: str | None = None
+
+
+class DTMProviderError(Exception):
+    """Base class for machine-readable DTM provider errors."""
+
+    error_type = "provider_error"
+
+    def __init__(
+        self,
+        message: str,
+        provider_code: str | None = None,
+        provider_name: str | None = None,
+    ):
+        super().__init__(message)
+        self.provider_code = provider_code
+        self.provider_name = provider_name
+
+    def to_details(self) -> DTMErrorDetails:
+        """Convert the error to a serializable details model."""
+        return DTMErrorDetails(
+            error_type=self.error_type,
+            message=str(self),
+            provider_code=self.provider_code,
+            provider_name=self.provider_name,
+        )
+
+
+class DTMProviderRuntimeError(DTMProviderError, RuntimeError):
+    """Base class for runtime DTM provider errors."""
+
+
+class DTMProviderValueError(DTMProviderError, ValueError):
+    """Base class for validation DTM provider errors."""
+
+
+class ProviderUnavailableError(DTMProviderRuntimeError):
+    """Raised when a requested provider is not available."""
+
+    error_type = "provider_unavailable"
+
+
+class OutsideCoverageError(DTMProviderValueError):
+    """Raised when the requested geometry falls outside provider coverage."""
+
+    error_type = "outside_coverage"
+
+
+class AuthConfigMissingError(DTMProviderValueError):
+    """Raised when a provider is missing required credentials or configuration."""
+
+    error_type = "auth_config_missing"
+
+
+class DownloadFailedError(DTMProviderRuntimeError):
+    """Raised when source tiles cannot be downloaded."""
+
+    error_type = "download_failed"
+
+
+class ReprojectionFailedError(DTMProviderRuntimeError):
+    """Raised when raster reprojection fails."""
+
+    error_type = "reprojection_failed"
+
+
+class CropExtractionError(DTMProviderRuntimeError):
+    """Raised when the final ROI crop cannot be produced."""
+
+    error_type = "crop_extraction_failed"
+
+
+class DTMResultMetadata(BaseModel):
+    """Structured metadata returned with DTM extraction results."""
+
+    requested_provider: str
+    requested_provider_name: str | None = None
+    actual_provider: str
+    actual_provider_name: str | None = None
+    resolution: float | None = None
+    output_path: str
+    output_crs: str
+    shape: tuple[int, int]
+    dtype: str
+    nodata: float | int | None = None
+    cache_hit: bool = False
+    cache_key: str
+    cache_path: str
+    fallback_used: bool = False
+    primary_failure_reason: DTMErrorDetails | None = None
+    source_files: list[str]
+    center: tuple[float, float]
+    width_m: int
+    height_m: int
+    rotation_deg: float = 0.0
+
+
+@dataclass(slots=True)
+class DTMExtractionResult:
+    """Return type for structured DTM extraction calls."""
+
+    data: np.ndarray
+    metadata: DTMResultMetadata
 
 
 class DTMProvider(ABC):
@@ -49,23 +165,40 @@ class DTMProvider(ABC):
 
     _max_retries: int = 5
     _retry_pause: int = 5
+    _output_crs: str = "EPSG:4326"
 
     def __init__(
         self,
         coordinates: tuple[float, float],
-        size: int,
+        size: int | None = None,
         user_settings: DTMProviderSettings | None = None,
         directory: str = os.path.join(os.getcwd(), "tiles"),
         logger: Any = logging.getLogger(__name__),
+        *,
+        width_m: int | None = None,
+        height_m: int | None = None,
+        rotation_deg: float = 0.0,
     ):
         self._coordinates = coordinates
         self._user_settings = user_settings
-        self._size = size
+        self._width_m, self._height_m = self._resolve_dimensions(size, width_m, height_m)
+        self._size = int(size) if size is not None else max(self._width_m, self._height_m)
+        self._rotation_deg = float(rotation_deg % 360)
+        self._download_width_m, self._download_height_m = self._calculate_download_dimensions(
+            self._width_m,
+            self._height_m,
+            self._rotation_deg,
+        )
+        self._directory = directory
 
         if not self._code:
             raise ValueError("Provider code must be defined.")
-        self._tile_directory = os.path.join(directory, self._code)
+        self._cache_key = self.build_cache_key()
+        self._provider_directory = os.path.join(directory, self._code)
+        self._tile_directory = os.path.join(self._provider_directory, self._cache_key)
         os.makedirs(self._tile_directory, exist_ok=True)
+        self._result_tiff_path = os.path.join(self._tile_directory, "result.tif")
+        self._metadata_path = os.path.join(self._tile_directory, "result_metadata.json")
 
         self.logger = logger
 
@@ -116,12 +249,47 @@ class DTMProvider(ABC):
 
     @property
     def size(self) -> int:
-        """Size of the DTM data in meters.
+        """Legacy size of the DTM request in meters.
 
         Returns:
-            int: Size of the DTM data.
+            int: Largest requested side length in meters.
         """
         return self._size
+
+    @property
+    def width_m(self) -> int:
+        """Requested ROI width in meters."""
+        return self._width_m
+
+    @property
+    def height_m(self) -> int:
+        """Requested ROI height in meters."""
+        return self._height_m
+
+    @property
+    def rotation_deg(self) -> float:
+        """Rotation of the requested ROI around its center in degrees."""
+        return self._rotation_deg
+
+    @property
+    def download_width_m(self) -> int:
+        """Axis-aligned width required to fully cover the requested ROI."""
+        return self._download_width_m
+
+    @property
+    def download_height_m(self) -> int:
+        """Axis-aligned height required to fully cover the requested ROI."""
+        return self._download_height_m
+
+    @property
+    def cache_key(self) -> str:
+        """Stable cache identifier for the current request geometry."""
+        return self._cache_key
+
+    @property
+    def cache_path(self) -> str:
+        """Cache directory used for the current request geometry."""
+        return self._tile_directory
 
     @property
     def url(self) -> str | None:
@@ -200,7 +368,7 @@ class DTMProvider(ABC):
         Returns:
             DTMProvider: Provider class or None if not found.
         """
-        for provider in cls.__subclasses__():
+        for provider in cls._all_provider_classes():
             if provider.code() == code:
                 return provider
         return None
@@ -215,14 +383,19 @@ class DTMProvider(ABC):
         Returns:
             DTMProvider: Provider class or None if not found.
         """
-        for provider in cls.__subclasses__():
+        for provider in cls._all_provider_classes():
             if provider.name() == name:
                 return provider
         return None
 
     @classmethod
     def get_valid_provider_descriptions(
-        cls, lat_lon: tuple[float, float], default_code: str = "srtm30"
+        cls,
+        lat_lon: tuple[float, float],
+        default_code: str = "srtm30",
+        width_m: int | None = None,
+        height_m: int | None = None,
+        rotation_deg: float = 0.0,
     ) -> dict[str, str]:
         """Get descriptions of all providers, where keys are provider codes and
         values are provider descriptions.
@@ -236,7 +409,13 @@ class DTMProvider(ABC):
         """
         providers: dict[str, str] = {}
         for provider in cls.get_non_base_providers():
-            if provider.inside_bounding_box(lat_lon):
+            if cls._provider_matches_geometry(
+                provider,
+                lat_lon,
+                width_m,
+                height_m,
+                rotation_deg,
+            ):
                 code = provider.code()
                 if code is not None:
                     providers[code] = provider.description()
@@ -258,11 +437,20 @@ class DTMProvider(ABC):
 
         base_providers = [WCSProvider, WMSProvider]
 
-        return [provider for provider in cls.__subclasses__() if provider not in base_providers]
+        return [
+            provider
+            for provider in cls._all_provider_classes()
+            if provider not in base_providers and not provider.__subclasses__()
+        ]
 
     @classmethod
     def get_list(
-        cls, lat_lon: tuple[float, float], include_unreliable: bool = False
+        cls,
+        lat_lon: tuple[float, float],
+        include_unreliable: bool = False,
+        width_m: int | None = None,
+        height_m: int | None = None,
+        rotation_deg: float = 0.0,
     ) -> list[Type[DTMProvider]]:
         """Get all providers that can be used for the given coordinates.
 
@@ -275,7 +463,13 @@ class DTMProvider(ABC):
         """
         providers = []
         for provider in cls.get_non_base_providers():
-            if provider.inside_bounding_box(lat_lon):
+            if cls._provider_matches_geometry(
+                provider,
+                lat_lon,
+                width_m,
+                height_m,
+                rotation_deg,
+            ):
                 if not include_unreliable and provider.unreliable():
                     continue
                 providers.append(provider)
@@ -283,7 +477,12 @@ class DTMProvider(ABC):
 
     @classmethod
     def get_best(
-        cls, lat_lon: tuple[float, float], default_code: str = "srtm30"
+        cls,
+        lat_lon: tuple[float, float],
+        default_code: str = "srtm30",
+        width_m: int | None = None,
+        height_m: int | None = None,
+        rotation_deg: float = 0.0,
     ) -> Type[DTMProvider] | None:
         """Get the best provider for the given coordinates.
 
@@ -294,7 +493,12 @@ class DTMProvider(ABC):
         Returns:
             DTMProvider: Best provider class or None if not found.
         """
-        providers = cls.get_list(lat_lon)
+        providers = cls.get_list(
+            lat_lon,
+            width_m=width_m,
+            height_m=height_m,
+            rotation_deg=rotation_deg,
+        )
         if not providers:
             return cls.get_provider_by_code(default_code)
 
@@ -318,6 +522,75 @@ class DTMProvider(ABC):
                 return True
         return False
 
+    @classmethod
+    def covers_geometry(
+        cls,
+        lat_lon: tuple[float, float],
+        width_m: int,
+        height_m: int | None = None,
+        rotation_deg: float = 0.0,
+    ) -> bool:
+        """Check whether the provider covers the full requested geometry."""
+        resolved_height = height_m if height_m is not None else width_m
+        bbox = cls.get_geometry_bbox(lat_lon, width_m, resolved_height, rotation_deg)
+        extents = cls._extents
+        if extents is None:
+            return True
+        north, south, east, west = bbox
+        for extent in extents:
+            if (
+                extent[0] >= north
+                and extent[1] <= south
+                and extent[2] >= east
+                and extent[3] <= west
+            ):
+                return True
+        return False
+
+    @classmethod
+    def get_geometry_bbox(
+        cls,
+        coordinates: tuple[float, float],
+        width_m: int,
+        height_m: int,
+        rotation_deg: float = 0.0,
+    ) -> tuple[float, float, float, float]:
+        """Get the EPSG:4326 bounding box for a rectangular ROI."""
+        polygon = cls.build_roi_polygon(coordinates, width_m, height_m, rotation_deg)
+        lons = [point[0] for point in polygon]
+        lats = [point[1] for point in polygon]
+        return max(lats), min(lats), max(lons), min(lons)
+
+    @classmethod
+    def build_roi_polygon(
+        cls,
+        coordinates: tuple[float, float],
+        width_m: int,
+        height_m: int,
+        rotation_deg: float = 0.0,
+    ) -> list[tuple[float, float]]:
+        """Build a rectangular ROI polygon in EPSG:4326 as (lon, lat) points."""
+        half_width = width_m / 2.0
+        half_height = height_m / 2.0
+        angle_rad = math.radians(rotation_deg)
+        cos_angle = math.cos(angle_rad)
+        sin_angle = math.sin(angle_rad)
+
+        _, to_wgs84 = cls._build_local_transformers(coordinates)
+        local_corners = [
+            (-half_width, -half_height),
+            (half_width, -half_height),
+            (half_width, half_height),
+            (-half_width, half_height),
+        ]
+        polygon: list[tuple[float, float]] = []
+        for x_offset, y_offset in local_corners:
+            rotated_x = (x_offset * cos_angle) - (y_offset * sin_angle)
+            rotated_y = (x_offset * sin_angle) + (y_offset * cos_angle)
+            lon, lat = to_wgs84.transform(rotated_x, rotated_y)
+            polygon.append((float(lon), float(lat)))
+        return polygon
+
     @abstractmethod
     def download_tiles(self) -> list[str]:
         """Download tiles from the provider.
@@ -339,51 +612,101 @@ class DTMProvider(ABC):
         Returns:
             np.ndarray: Numpy array of the tile.
         """
-        # download tiles using DTM provider implementation
+        return self.get_result().data
+
+    def get_result(
+        self,
+        fallback_provider_code: str | None = None,
+        fallback_user_settings: DTMProviderSettings | None = None,
+    ) -> DTMExtractionResult:
+        """Get the extracted DTM together with structured metadata."""
+        requested_provider_code = self.code() or "unknown"
+        requested_provider_name = self.name()
 
         try:
-            tiles = self.download_tiles()
-        except RequestException as e:
-            error_message = (
-                "Failed to download tiles from DTM provider servers. "
-                "It's probably happening because the requested area is outside of the provider's "
-                "coverage area or the provider's servers are currently unavailable. "
-                "Please check the provider's coverage and ensure that the coordinates you specified "
-                "are inside the coverage area. "
-                "You can also try different providers."
+            return self._create_result(
+                requested_provider_code=requested_provider_code,
+                requested_provider_name=requested_provider_name,
             )
-            self.logger.error(f"Error while downloading tiles: {e}")
-            raise RuntimeError(error_message) from e
-        self.logger.debug("Downloaded tiles: %s", tiles)
+        except DTMProviderError as primary_error:
+            if not fallback_provider_code:
+                raise
 
-        if not tiles:
-            error_message = (
-                "No tiles were downloaded from the provider. "
-                "The coordinates you provided are outside the coverage area of this provider, "
-                "and the provider does not have data for this area. "
-                "Try using a different provider."
+            fallback_provider_class = self.get_provider_by_code(fallback_provider_code)
+            if fallback_provider_class is None:
+                raise ProviderUnavailableError(
+                    f"Fallback provider '{fallback_provider_code}' is not available.",
+                    provider_code=fallback_provider_code,
+                ) from primary_error
+
+            fallback_provider = fallback_provider_class(
+                self.coordinates,
+                size=self.size,
+                user_settings=fallback_user_settings,
+                directory=self._directory,
+                logger=self.logger,
+                width_m=self.width_m,
+                height_m=self.height_m,
+                rotation_deg=self.rotation_deg,
             )
-            self.logger.error(error_message)
-            raise ValueError(error_message)
+            try:
+                return fallback_provider._create_result(
+                    requested_provider_code=requested_provider_code,
+                    requested_provider_name=requested_provider_name,
+                    fallback_used=True,
+                    primary_failure=primary_error.to_details(),
+                )
+            except DTMProviderError as fallback_error:
+                raise fallback_error from primary_error
 
-        # merge tiles if necessary
-        if len(tiles) > 1:
-            self.logger.debug("Multiple tiles downloaded. Merging tiles")
-            tile, _ = self.merge_geotiff(tiles)
+    @classmethod
+    def extract_area(
+        cls,
+        center: tuple[float, float],
+        width_m: int,
+        height_m: int | None = None,
+        rotation_deg: float = 0.0,
+        provider_code: str | None = None,
+        fallback_provider_code: str | None = None,
+        user_settings: DTMProviderSettings | None = None,
+        fallback_user_settings: DTMProviderSettings | None = None,
+        directory: str = os.path.join(os.getcwd(), "tiles"),
+        logger: Any = logging.getLogger(__name__),
+    ) -> DTMExtractionResult:
+        """High-level extraction API for rectangular and rotated ROIs."""
+        resolved_height = height_m if height_m is not None else width_m
+
+        if cls is DTMProvider:
+            provider_class = (
+                cls.get_provider_by_code(provider_code)
+                if provider_code
+                else cls.get_best(
+                    center,
+                    width_m=width_m,
+                    height_m=resolved_height,
+                    rotation_deg=rotation_deg,
+                )
+            )
         else:
-            tile = tiles[0]
+            provider_class = cls
 
-        # determine CRS of the resulting tile and reproject if necessary
-        with rasterio.open(tile) as src:
-            crs = src.crs
-        if crs != "EPSG:4326":
-            self.logger.debug("Reprojecting GeoTIFF from %s to EPSG:4326...", crs)
-            tile = self.reproject_geotiff(tile)
+        if provider_class is None:
+            raise ProviderUnavailableError("No provider is available for the requested geometry.")
 
-        # extract region of interest from the tile
-        data = self.extract_roi(tile)
-
-        return data
+        provider = provider_class(
+            center,
+            size=width_m if resolved_height == width_m else max(width_m, resolved_height),
+            user_settings=user_settings,
+            directory=directory,
+            logger=logger,
+            width_m=width_m,
+            height_m=resolved_height,
+            rotation_deg=rotation_deg,
+        )
+        return provider.get_result(
+            fallback_provider_code=fallback_provider_code,
+            fallback_user_settings=fallback_user_settings,
+        )
 
     @property
     def image(self) -> np.ndarray:
@@ -396,22 +719,101 @@ class DTMProvider(ABC):
             ValueError: If the tile does not contain any data.
         """
         data = self.get_numpy()
-        if not np.any(data):
-            raise ValueError("No data in the tile. Try different provider.")
+        if data.size == 0:
+            raise OutsideCoverageError(
+                "No data in the tile. Try different provider.",
+                provider_code=self.code(),
+                provider_name=self.name(),
+            )
+        if np.ma.isMaskedArray(data) and data.count() == 0:
+            raise OutsideCoverageError(
+                "No data in the tile. Try different provider.",
+                provider_code=self.code(),
+                provider_name=self.name(),
+            )
         return data
 
     # region helpers
     def get_bbox(self) -> tuple[float, float, float, float]:
-        """Get bounding box of the tile based on the center point and size.
+        """Get bounding box of the download area based on the request geometry.
 
         Returns:
-            tuple: Bounding box of the tile (north, south, east, west).
+            tuple: Bounding box of the download area (north, south, east, west).
         """
-        west, south, east, north = ox.utils_geo.bbox_from_point(  # type: ignore
-            self.coordinates, dist=self.size // 2, project_utm=False
+        return self.get_geometry_bbox(
+            self.coordinates,
+            self.width_m,
+            self.height_m,
+            self.rotation_deg,
         )
-        bbox = float(north), float(south), float(east), float(west)
-        return bbox
+
+    def get_roi_polygon(self) -> list[tuple[float, float]]:
+        """Get the requested ROI polygon as EPSG:4326 (lon, lat) coordinates."""
+        return self.build_roi_polygon(
+            self.coordinates,
+            self.width_m,
+            self.height_m,
+            self.rotation_deg,
+        )
+
+    def get_roi_geometry(self) -> dict[str, Any]:
+        """Get the requested ROI polygon as a GeoJSON geometry."""
+        polygon = self.get_roi_polygon()
+        return {
+            "type": "Polygon",
+            "coordinates": [[*polygon, polygon[0]]],
+        }
+
+    def build_cache_key(self) -> str:
+        """Build a stable cache key for the current request geometry."""
+        payload = {
+            "provider": self.code(),
+            "center": [round(self.coordinates[0], 8), round(self.coordinates[1], 8)],
+            "width_m": self.width_m,
+            "height_m": self.height_m,
+            "rotation_deg": round(self.rotation_deg, 6),
+            "output_crs": self._output_crs,
+            "resolution": self.resolution(),
+        }
+        canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+        return hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:24]
+
+    @staticmethod
+    def split_bbox(
+        bbox: tuple[float, float, float, float],
+        columns: int,
+        rows: int,
+    ) -> list[tuple[float, float, float, float]]:
+        """Split a bounding box into an evenly spaced grid."""
+        if columns <= 0 or rows <= 0:
+            raise ValueError("Bounding box grid dimensions must be positive integers.")
+
+        north, south, east, west = bbox
+        lon_step = (east - west) / columns
+        lat_step = (north - south) / rows
+        tiles: list[tuple[float, float, float, float]] = []
+        for column in range(columns):
+            tile_west = west + (column * lon_step)
+            tile_east = west + ((column + 1) * lon_step)
+            for row in range(rows):
+                tile_south = south + (row * lat_step)
+                tile_north = south + ((row + 1) * lat_step)
+                tiles.append((tile_north, tile_south, tile_east, tile_west))
+        return tiles
+
+    @staticmethod
+    def get_tile_pixel_dimensions(
+        tile_width_m: float,
+        tile_height_m: float,
+        max_pixels: int,
+    ) -> tuple[int, int]:
+        """Scale tile pixel dimensions while preserving aspect ratio."""
+        max_pixels = max(1, int(max_pixels))
+        largest_edge = max(tile_width_m, tile_height_m, 1.0)
+        scale = max_pixels / largest_edge
+        pixel_width = min(max_pixels, max(1, math.ceil(tile_width_m * scale)))
+        pixel_height = min(max_pixels, max(1, math.ceil(tile_height_m * scale)))
+        return pixel_width, pixel_height
 
     def download_tif_files(
         self,
@@ -794,21 +1196,374 @@ class DTMProvider(ABC):
         Returns:
             np.ndarray: Numpy array of the ROI.
         """
-        north, south, east, west = self.get_bbox()
+        data, _ = self._mask_roi(tile_path)
+        return data[0]
+
+    @staticmethod
+    def _resolve_dimensions(
+        size: int | None,
+        width_m: int | None,
+        height_m: int | None,
+    ) -> tuple[int, int]:
+        """Resolve the requested ROI dimensions while preserving legacy size support."""
+        resolved_width = width_m if width_m is not None else size
+        resolved_height = height_m if height_m is not None else size
+        if resolved_width is None or resolved_height is None:
+            raise ValueError("Either size or both width_m and height_m must be provided.")
+        if resolved_width <= 0 or resolved_height <= 0:
+            raise ValueError("Requested ROI dimensions must be positive integers.")
+        return int(resolved_width), int(resolved_height)
+
+    @staticmethod
+    def _calculate_download_dimensions(
+        width_m: int,
+        height_m: int,
+        rotation_deg: float,
+    ) -> tuple[int, int]:
+        """Calculate the axis-aligned extent required to cover a rotated rectangle."""
+        angle_rad = math.radians(rotation_deg % 180)
+        bbox_width = abs(width_m * math.cos(angle_rad)) + abs(height_m * math.sin(angle_rad))
+        bbox_height = abs(width_m * math.sin(angle_rad)) + abs(height_m * math.cos(angle_rad))
+        return math.ceil(bbox_width), math.ceil(bbox_height)
+
+    @staticmethod
+    def _build_local_transformers(
+        coordinates: tuple[float, float],
+    ) -> tuple[Transformer, Transformer]:
+        """Build local metric transformers centered on the requested ROI."""
+        lat, lon = coordinates
+        local_crs = CRS.from_proj4(
+            f"+proj=aeqd +lat_0={lat} +lon_0={lon} +datum=WGS84 +units=m +no_defs"
+        )
+        to_local = Transformer.from_crs("EPSG:4326", local_crs, always_xy=True)
+        to_wgs84 = Transformer.from_crs(local_crs, "EPSG:4326", always_xy=True)
+        return to_local, to_wgs84
+
+    @classmethod
+    def _provider_matches_geometry(
+        cls,
+        provider: Type[DTMProvider],
+        lat_lon: tuple[float, float],
+        width_m: int | None,
+        height_m: int | None,
+        rotation_deg: float,
+    ) -> bool:
+        """Check whether a provider matches the requested point or full geometry."""
+        if width_m is None and height_m is None:
+            return provider.inside_bounding_box(lat_lon)
+        if width_m is None:
+            return provider.inside_bounding_box(lat_lon)
+        resolved_height = height_m if height_m is not None else width_m
+        return provider.covers_geometry(lat_lon, width_m, resolved_height, rotation_deg)
+
+    @classmethod
+    def _all_provider_classes(cls) -> list[Type[DTMProvider]]:
+        """Collect all provider classes from the full inheritance tree."""
+        providers: list[Type[DTMProvider]] = []
+        seen: set[type[Any]] = set()
+        stack: list[type[Any]] = [DTMProvider]
+
+        while stack:
+            provider_class = stack.pop()
+            for child in provider_class.__subclasses__():
+                if child in seen:
+                    continue
+                seen.add(child)
+                providers.append(cast(Type[DTMProvider], child))
+                stack.append(child)
+
+        return providers
+
+    def _create_result(
+        self,
+        requested_provider_code: str,
+        requested_provider_name: str | None,
+        fallback_used: bool = False,
+        primary_failure: DTMErrorDetails | None = None,
+    ) -> DTMExtractionResult:
+        """Run the full extraction pipeline and return data plus metadata."""
+        if self.settings_required() and self.user_settings is None:
+            raise AuthConfigMissingError(
+                "User settings are required for this provider.",
+                provider_code=self.code(),
+                provider_name=self.name(),
+            )
+
+        if os.path.exists(self._result_tiff_path):
+            return self._build_result_from_output(
+                self._result_tiff_path,
+                requested_provider_code=requested_provider_code,
+                requested_provider_name=requested_provider_name,
+                fallback_used=fallback_used,
+                primary_failure=primary_failure,
+                cache_hit=True,
+                source_files=self._get_cached_source_files(),
+            )
+
+        source_files = self._download_source_tiles()
+        prepared_tile = self._prepare_source_tile(source_files)
+        self._write_result_tiff(prepared_tile, self._result_tiff_path)
+        result = self._build_result_from_output(
+            self._result_tiff_path,
+            requested_provider_code=requested_provider_code,
+            requested_provider_name=requested_provider_name,
+            fallback_used=fallback_used,
+            primary_failure=primary_failure,
+            cache_hit=False,
+            source_files=source_files,
+        )
+        self._write_result_metadata(result.metadata)
+        return result
+
+    def _download_source_tiles(self) -> list[str]:
+        """Download all source tiles for the current request geometry."""
+        try:
+            tiles = self.download_tiles()
+        except DTMProviderError:
+            raise
+        except RequestException as e:
+            self.logger.error("Error while downloading tiles: %s", e)
+            raise DownloadFailedError(
+                "Failed to download tiles from the provider.",
+                provider_code=self.code(),
+                provider_name=self.name(),
+            ) from e
+        except FileNotFoundError as e:
+            self.logger.error("Requested geometry is outside provider coverage: %s", e)
+            raise OutsideCoverageError(
+                "The requested geometry is outside the provider coverage area.",
+                provider_code=self.code(),
+                provider_name=self.name(),
+            ) from e
+        except (RuntimeError, ValueError) as e:
+            raise self._normalize_error(e) from e
+        except Exception as e:
+            self.logger.error("Unexpected download error: %s", e)
+            raise DownloadFailedError(
+                "Failed to download tiles from the provider.",
+                provider_code=self.code(),
+                provider_name=self.name(),
+            ) from e
+
+        self.logger.debug("Downloaded tiles: %s", tiles)
+        if not tiles:
+            raise OutsideCoverageError(
+                "No tiles were downloaded from the provider.",
+                provider_code=self.code(),
+                provider_name=self.name(),
+            )
+        return tiles
+
+    def _prepare_source_tile(self, tiles: list[str]) -> str:
+        """Merge and reproject source tiles into a single crop-ready raster."""
+        if len(tiles) > 1:
+            self.logger.debug("Multiple tiles downloaded. Merging tiles")
+            try:
+                tile, _ = self.merge_geotiff(tiles)
+            except Exception as e:
+                raise CropExtractionError(
+                    "Failed to merge the downloaded tiles.",
+                    provider_code=self.code(),
+                    provider_name=self.name(),
+                ) from e
+        else:
+            tile = tiles[0]
+
+        with rasterio.open(tile) as src:
+            crs = src.crs.to_string() if src.crs else None
+
+        if crs is None:
+            raise ReprojectionFailedError(
+                "Source tile does not define a CRS.",
+                provider_code=self.code(),
+                provider_name=self.name(),
+            )
+        if crs != self._output_crs:
+            self.logger.debug("Reprojecting GeoTIFF from %s to %s...", crs, self._output_crs)
+            try:
+                tile = self.reproject_geotiff(tile)
+            except Exception as e:
+                raise ReprojectionFailedError(
+                    f"Failed to reproject the source tile from {crs} to {self._output_crs}.",
+                    provider_code=self.code(),
+                    provider_name=self.name(),
+                ) from e
+
+        return tile
+
+    def _write_result_tiff(self, tile_path: str, output_path: str) -> None:
+        """Write the cropped ROI raster to the stable cache path."""
+        data, metadata = self._mask_roi(tile_path)
+        filled_data = data.filled(metadata["nodata"]) if np.ma.isMaskedArray(data) else data
+        with rasterio.open(output_path, "w", **metadata) as dst:
+            dst.write(filled_data)
+
+    def _mask_roi(self, tile_path: str) -> tuple[np.ma.MaskedArray, dict[str, Any]]:
+        """Mask a raster to the requested ROI polygon."""
         with rasterio.open(tile_path) as src:
             self.logger.debug("Opened tile, shape: %s, dtype: %s.", src.shape, src.dtypes[0])
-            window = rasterio.windows.from_bounds(west, south, east, north, src.transform)
-            self.logger.debug(
-                "Window parameters. Column offset: %s, row offset: %s, width: %s, height: %s.",
-                window.col_off,
-                window.row_off,
-                window.width,
-                window.height,
+            nodata = self._get_output_nodata(src)
+            data, transform = mask(
+                src,
+                [self.get_roi_geometry()],
+                crop=True,
+                filled=False,
+                nodata=nodata,
             )
-            data = src.read(1, window=window, masked=True)
-        if not data.size > 0:
-            raise ValueError("No data in the tile.")
+            metadata = src.meta.copy()
+            metadata.update(
+                {
+                    "driver": "GTiff",
+                    "height": data.shape[1],
+                    "width": data.shape[2],
+                    "transform": transform,
+                    "nodata": nodata,
+                }
+            )
 
-        return data
+        if data.size == 0:
+            raise CropExtractionError(
+                "The requested geometry does not contain any data.",
+                provider_code=self.code(),
+                provider_name=self.name(),
+            )
+        if np.ma.isMaskedArray(data) and data.count() == 0:
+            raise CropExtractionError(
+                "The cropped ROI does not contain any valid data.",
+                provider_code=self.code(),
+                provider_name=self.name(),
+            )
+        return data, metadata
+
+    def _get_output_nodata(self, dataset: rasterio.DatasetReader) -> float | int:
+        """Resolve a nodata value for cropped outputs."""
+        if dataset.nodata is not None:
+            return dataset.nodata
+        dtype = np.dtype(dataset.dtypes[0])
+        if np.issubdtype(dtype, np.floating):
+            return float("nan")
+        if np.issubdtype(dtype, np.signedinteger):
+            return int(np.iinfo(dtype).min)
+        return 0
+
+    def _build_result_from_output(
+        self,
+        output_path: str,
+        requested_provider_code: str,
+        requested_provider_name: str | None,
+        fallback_used: bool,
+        primary_failure: DTMErrorDetails | None,
+        cache_hit: bool,
+        source_files: list[str] | None,
+    ) -> DTMExtractionResult:
+        """Create a structured result from a cached or freshly written raster."""
+        with rasterio.open(output_path) as src:
+            data = src.read(1, masked=True)
+            if data.size == 0 or (np.ma.isMaskedArray(data) and data.count() == 0):
+                raise CropExtractionError(
+                    "The output raster does not contain any valid data.",
+                    provider_code=self.code(),
+                    provider_name=self.name(),
+                )
+            metadata = DTMResultMetadata(
+                requested_provider=requested_provider_code,
+                requested_provider_name=requested_provider_name,
+                actual_provider=self.code() or "unknown",
+                actual_provider_name=self.name(),
+                resolution=self.resolution(),
+                output_path=output_path,
+                output_crs=src.crs.to_string() if src.crs else self._output_crs,
+                shape=(src.height, src.width),
+                dtype=src.dtypes[0],
+                nodata=src.nodata,
+                cache_hit=cache_hit,
+                cache_key=self.cache_key,
+                cache_path=self.cache_path,
+                fallback_used=fallback_used,
+                primary_failure_reason=primary_failure,
+                source_files=source_files or [],
+                center=self.coordinates,
+                width_m=self.width_m,
+                height_m=self.height_m,
+                rotation_deg=self.rotation_deg,
+            )
+        return DTMExtractionResult(data=data, metadata=metadata)
+
+    def _write_result_metadata(self, metadata: DTMResultMetadata) -> None:
+        """Persist metadata next to the cached raster output."""
+        with open(self._metadata_path, "w", encoding="utf-8") as metadata_file:
+            metadata_file.write(metadata.model_dump_json(indent=2))
+
+    def _get_cached_source_files(self) -> list[str]:
+        """Read source file paths from cached metadata if available."""
+        cached_metadata = self._load_cached_metadata()
+        return cached_metadata.source_files if cached_metadata else []
+
+    def _load_cached_metadata(self) -> DTMResultMetadata | None:
+        """Load metadata from the cache directory if it exists and is valid."""
+        if not os.path.exists(self._metadata_path):
+            return None
+        try:
+            with open(self._metadata_path, "r", encoding="utf-8") as metadata_file:
+                return DTMResultMetadata.model_validate_json(metadata_file.read())
+        except (OSError, ValueError) as e:
+            self.logger.warning(
+                "Failed to read cached metadata from %s: %s", self._metadata_path, e
+            )
+            return None
+
+    def _normalize_error(self, error: Exception) -> DTMProviderError:
+        """Convert provider-specific exceptions into stable machine-readable errors."""
+        if isinstance(error, DTMProviderError):
+            return error
+
+        message = str(error)
+        normalized_message = message.lower()
+        provider_code = self.code()
+        provider_name = self.name()
+
+        if any(
+            token in normalized_message
+            for token in [
+                "user settings are required",
+                "token is required",
+                "api key is required",
+                "username is required",
+                "password is required",
+                "dataset is required",
+                "resolution is required",
+            ]
+        ):
+            return AuthConfigMissingError(
+                message, provider_code=provider_code, provider_name=provider_name
+            )
+        if (
+            any(
+                token in normalized_message
+                for token in [
+                    "outside the coverage",
+                    "no tiles were downloaded",
+                    "tile not found",
+                    "not found",
+                ]
+            )
+            and "crop" not in normalized_message
+        ):
+            return OutsideCoverageError(
+                message, provider_code=provider_code, provider_name=provider_name
+            )
+        if "reproject" in normalized_message or "crs" in normalized_message:
+            return ReprojectionFailedError(
+                message,
+                provider_code=provider_code,
+                provider_name=provider_name,
+            )
+        if "crop" in normalized_message or "no data in the tile" in normalized_message:
+            return CropExtractionError(
+                message, provider_code=provider_code, provider_name=provider_name
+            )
+        return DownloadFailedError(
+            message, provider_code=provider_code, provider_name=provider_name
+        )
 
     # endregion
