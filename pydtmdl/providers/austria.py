@@ -33,11 +33,18 @@ class AustriaProvider(DTMProvider):
 
     _tile_size = 50000
 
-_extents = [
-    (49.147828, 45.95086, 17.777012, 9.051669),
-]
+    # One coarse Austria-wide extent.
+    # Important: DTMProvider coverage checks work on individual bounding boxes,
+    # not on the union of multiple disjoint bands. Therefore Austria should be
+    # represented by one enclosing extent here.
+    _extents = [
+        (49.147828, 45.95086, 17.777012, 9.051669),
+    ]
 
-    # Official 2024 BEV tile coverage: 55 tiles.
+    # Official 2024 BEV tile coverage: 55 tiles total.
+    # Dictionary structure:
+    #   key   = northing of the 50 km tile row in EPSG:3035
+    #   value = tuple of eastings available in that row
     _available_tiles = {
         2550000: (4650000,),
         2600000: (
@@ -151,7 +158,12 @@ _extents = [
                     yield northing, easting
 
     def _open_remote(self, url: str):
-        """Open a remote BEV COG, with fallback for GDAL builds requiring /vsicurl/."""
+        """
+        Open a remote BEV COG.
+
+        Some GDAL/rasterio builds can open HTTPS COGs directly.
+        Others require /vsicurl/. We try both.
+        """
         last_error = None
 
         for candidate in (url, f"/vsicurl/{url}"):
@@ -168,18 +180,19 @@ _extents = [
     @staticmethod
     def _format_bound(value: float) -> str:
         """
-        Format bounds for deterministic cache filenames.
+        Format floating bounds deterministically for cache filenames.
 
-        Millimeter precision is far more than enough here and avoids collisions
-        that can happen with raw int() truncation.
+        Using int(...) would truncate and may cause collisions.
+        We keep millimeter precision, which is more than sufficient here.
         """
         return f"{value:.3f}".replace(".", "p").replace("-", "m")
 
     def _atomic_write_geotiff(self, file_path: str, data, profile: dict) -> None:
         """
-        Write a GeoTIFF atomically:
-        1) write to a temp file in the same directory
-        2) replace target path atomically
+        Write a single-band GeoTIFF atomically.
+
+        This avoids cache corruption if two parallel runs try to create the same
+        target file at nearly the same time.
         """
         directory = os.path.dirname(file_path)
         os.makedirs(directory, exist_ok=True)
@@ -200,6 +213,32 @@ _extents = [
                 os.remove(tmp_path)
             raise
 
+    def _atomic_write_mosaic(self, file_path: str, mosaic, profile: dict) -> None:
+        """
+        Write a multi-band mosaic GeoTIFF atomically.
+
+        merge(...) returns an array with shape (bands, rows, cols), so we write
+        the full array, not just band 1.
+        """
+        directory = os.path.dirname(file_path)
+        os.makedirs(directory, exist_ok=True)
+
+        fd, tmp_path = tempfile.mkstemp(
+            suffix=".tmp.tif",
+            prefix="tmp_mosaic_",
+            dir=directory,
+        )
+        os.close(fd)
+
+        try:
+            with rasterio.open(tmp_path, "w", **profile) as dst:
+                dst.write(mosaic)
+            os.replace(tmp_path, file_path)
+        except Exception:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+            raise
+
     def _materialize_tile_window(
         self,
         northing: int,
@@ -209,7 +248,11 @@ _extents = [
         right: float,
         top: float,
     ) -> str | None:
-        """Read the requested part of one BEV tile and save it as a local GeoTIFF."""
+        """
+        Read the requested part of one BEV tile and save it as a local GeoTIFF.
+
+        Returns the local file path or None if the requested window has no area.
+        """
         tile_left = easting
         tile_bottom = northing
         tile_right = easting + self._tile_size
@@ -234,6 +277,7 @@ _extents = [
                 return None
 
             data = src.read(1, window=window)
+
             if data.size == 0:
                 return None
 
@@ -249,7 +293,6 @@ _extents = [
             )
             file_path = os.path.join(self.shared_tiff_path, file_name)
 
-            # Fast path for cache hit.
             if os.path.isfile(file_path):
                 return file_path
 
@@ -267,14 +310,21 @@ _extents = [
             if src.nodata is not None:
                 profile["nodata"] = src.nodata
 
-            # Avoid non-atomic direct writes.
+            # Double-check before writing. This is still not a lock,
+            # but together with atomic replacement it is robust enough for cache use.
             if not os.path.isfile(file_path):
                 self._atomic_write_geotiff(file_path, data, profile)
 
         return file_path
 
     def download_tiles(self) -> list[str]:
-        """Return one local GeoTIFF covering the requested area in BEV source CRS."""
+        """
+        Download/process Austria source data and return local GeoTIFF path(s).
+
+        For robust behavior with the pydtmdl pipeline, this provider creates
+        one local mosaic GeoTIFF covering the requested area and returns it
+        as a single-item list.
+        """
         left, bottom, right, top = self._get_projected_bbox()
 
         file_name = (
@@ -326,25 +376,6 @@ _extents = [
             if datasets[0].nodata is None:
                 out_meta.pop("nodata", None)
 
-            # Write final mosaic atomically as well.
-            directory = os.path.dirname(file_path)
-            os.makedirs(directory, exist_ok=True)
+            self._atomic_write_mosaic(file_path, mosaic, out_meta)
 
-            fd, tmp_path = tempfile.mkstemp(
-                suffix=".tmp.tif",
-                prefix="tmp_mosaic_",
-                dir=directory,
-            )
-            os.close(fd)
-
-            try:
-                with rasterio.open(tmp_path, "w", **out_meta) as dst:
-                    dst.write(mosaic)
-                os.replace(tmp_path, file_path)
-            except Exception:
-                if os.path.exists(tmp_path):
-                    os.remove(tmp_path)
-                raise
-
-        return [file_path]
-        
+        return [file_path]   
