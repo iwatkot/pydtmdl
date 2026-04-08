@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import math
 import os
+import tempfile
+from contextlib import ExitStack
 from typing import Iterator
 
 import rasterio
@@ -31,7 +33,7 @@ class AustriaProvider(DTMProvider):
 
     _tile_size = 50000
 
-    # Exact 50 km row envelopes derived from the official BEV ALS tile overview.
+    # Coverage envelopes derived from the official 2024 tile layout.
     _extents = [
         (46.427973, 45.95086, 14.927047, 14.242775),
         (46.963155, 46.332589, 16.275078, 9.724317),
@@ -156,7 +158,7 @@ class AustriaProvider(DTMProvider):
                     yield northing, easting
 
     def _open_remote(self, url: str):
-        """Open a remote BEV COG, with a fallback for GDAL builds that need /vsicurl/."""
+        """Open a remote BEV COG, with fallback for GDAL builds requiring /vsicurl/."""
         last_error = None
 
         for candidate in (url, f"/vsicurl/{url}"):
@@ -170,6 +172,41 @@ class AustriaProvider(DTMProvider):
 
         raise RasterioIOError(f"Failed to open remote dataset: {url}")
 
+    @staticmethod
+    def _format_bound(value: float) -> str:
+        """
+        Format bounds for deterministic cache filenames.
+
+        Millimeter precision is far more than enough here and avoids collisions
+        that can happen with raw int() truncation.
+        """
+        return f"{value:.3f}".replace(".", "p").replace("-", "m")
+
+    def _atomic_write_geotiff(self, file_path: str, data, profile: dict) -> None:
+        """
+        Write a GeoTIFF atomically:
+        1) write to a temp file in the same directory
+        2) replace target path atomically
+        """
+        directory = os.path.dirname(file_path)
+        os.makedirs(directory, exist_ok=True)
+
+        fd, tmp_path = tempfile.mkstemp(
+            suffix=".tmp.tif",
+            prefix="tmp_",
+            dir=directory,
+        )
+        os.close(fd)
+
+        try:
+            with rasterio.open(tmp_path, "w", **profile) as dst:
+                dst.write(data, 1)
+            os.replace(tmp_path, file_path)
+        except Exception:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
+            raise
+
     def _materialize_tile_window(
         self,
         northing: int,
@@ -179,7 +216,7 @@ class AustriaProvider(DTMProvider):
         right: float,
         top: float,
     ) -> str | None:
-        """Read only the requested part of one BEV tile and save it as a local GeoTIFF."""
+        """Read the requested part of one BEV tile and save it as a local GeoTIFF."""
         tile_left = easting
         tile_bottom = northing
         tile_right = easting + self._tile_size
@@ -204,7 +241,6 @@ class AustriaProvider(DTMProvider):
                 return None
 
             data = src.read(1, window=window)
-
             if data.size == 0:
                 return None
 
@@ -213,11 +249,14 @@ class AustriaProvider(DTMProvider):
 
             file_name = (
                 f"ALS_DTM_20240915_N{northing}E{easting}_"
-                f"{int(snapped_bounds[0])}_{int(snapped_bounds[1])}_"
-                f"{int(snapped_bounds[2])}_{int(snapped_bounds[3])}.tif"
+                f"{self._format_bound(snapped_bounds[0])}_"
+                f"{self._format_bound(snapped_bounds[1])}_"
+                f"{self._format_bound(snapped_bounds[2])}_"
+                f"{self._format_bound(snapped_bounds[3])}.tif"
             )
             file_path = os.path.join(self.shared_tiff_path, file_name)
 
+            # Fast path for cache hit.
             if os.path.isfile(file_path):
                 return file_path
 
@@ -235,8 +274,9 @@ class AustriaProvider(DTMProvider):
             if src.nodata is not None:
                 profile["nodata"] = src.nodata
 
-            with rasterio.open(file_path, "w", **profile) as dst:
-                dst.write(data, 1)
+            # Avoid non-atomic direct writes.
+            if not os.path.isfile(file_path):
+                self._atomic_write_geotiff(file_path, data, profile)
 
         return file_path
 
@@ -245,8 +285,11 @@ class AustriaProvider(DTMProvider):
         left, bottom, right, top = self._get_projected_bbox()
 
         file_name = (
-            f"ALS_DTM_20240915_"
-            f"{int(left)}_{int(bottom)}_{int(right)}_{int(top)}.tif"
+            "ALS_DTM_20240915_"
+            f"{self._format_bound(left)}_"
+            f"{self._format_bound(bottom)}_"
+            f"{self._format_bound(right)}_"
+            f"{self._format_bound(top)}.tif"
         )
         file_path = os.path.join(self._tile_directory, file_name)
 
@@ -270,10 +313,11 @@ class AustriaProvider(DTMProvider):
         if not local_tiles:
             return []
 
-        datasets = [rasterio.open(path) for path in local_tiles]
+        with ExitStack() as stack:
+            datasets = [stack.enter_context(rasterio.open(path)) for path in local_tiles]
 
-        try:
             mosaic, out_transform = merge(datasets)
+
             out_meta = datasets[0].meta.copy()
             out_meta.update(
                 {
@@ -289,10 +333,25 @@ class AustriaProvider(DTMProvider):
             if datasets[0].nodata is None:
                 out_meta.pop("nodata", None)
 
-            with rasterio.open(file_path, "w", **out_meta) as dst:
-                dst.write(mosaic)
-        finally:
-            for dataset in datasets:
-                dataset.close()
+            # Write final mosaic atomically as well.
+            directory = os.path.dirname(file_path)
+            os.makedirs(directory, exist_ok=True)
+
+            fd, tmp_path = tempfile.mkstemp(
+                suffix=".tmp.tif",
+                prefix="tmp_mosaic_",
+                dir=directory,
+            )
+            os.close(fd)
+
+            try:
+                with rasterio.open(tmp_path, "w", **out_meta) as dst:
+                    dst.write(mosaic)
+                os.replace(tmp_path, file_path)
+            except Exception:
+                if os.path.exists(tmp_path):
+                    os.remove(tmp_path)
+                raise
 
         return [file_path]
+        
