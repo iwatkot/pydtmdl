@@ -378,4 +378,4 @@ class AustriaProvider(DTMProvider):
 
             self._atomic_write_mosaic(file_path, mosaic, out_meta)
 
-        return [file_path]   
+        return [file_path]
