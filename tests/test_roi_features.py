@@ -96,6 +96,18 @@ def test_provider_width_only_preserves_square_behavior(tmp_path: Path):
     assert provider.rotation_deg == 0.0
 
 
+def test_get_numpy_axis_aligned_crop_has_no_artificial_border_mask(tmp_path: Path):
+    source_path = _write_test_raster(tmp_path / "source_axis_aligned.tif")
+    provider_code = _next_code("axis_aligned")
+    provider_class, _ = _make_static_provider(source_path, provider_code)
+
+    provider = provider_class((0.0, 0.0), size=1024, directory=str(tmp_path))
+    data = provider.get_numpy()
+
+    assert np.ma.isMaskedArray(data)
+    assert not np.ma.getmaskarray(data).any()
+
+
 def test_extract_area_returns_structured_metadata_for_rotated_rectangle(tmp_path: Path):
     source_path = _write_test_raster(tmp_path / "source_rotated.tif")
     provider_code = _next_code("rotated")
@@ -122,7 +134,28 @@ def test_extract_area_returns_structured_metadata_for_rotated_rectangle(tmp_path
     assert result.metadata.source_files == [str(source_path)]
     assert Path(result.metadata.output_path).exists()
     assert np.ma.isMaskedArray(result.data)
-    assert np.ma.getmaskarray(result.data).any()
+    assert not np.ma.getmaskarray(result.data).any()
+
+
+def test_positive_rotation_is_clockwise(tmp_path: Path):
+    source_path = _write_test_raster(tmp_path / "source_clockwise.tif")
+    provider_code = _next_code("clockwise")
+    provider_class, _ = _make_static_provider(source_path, provider_code)
+
+    result = DTMProvider.extract_area(
+        center=(0.0, 0.0),
+        width_m=2000,
+        height_m=1000,
+        rotation_deg=90,
+        provider_code=provider_class.code(),
+        directory=str(tmp_path),
+    )
+
+    with rasterio.open(result.metadata.output_path) as dataset:
+        top_left_x, top_left_y = dataset.xy(0, 0)
+
+    assert top_left_x > 0
+    assert top_left_y > 0
 
 
 def test_get_result_uses_stable_cache_key_and_reports_cache_hit(tmp_path: Path):

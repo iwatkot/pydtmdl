@@ -3,3 +3,4 @@ __pycache__/
 tiles/
 test.py
 output.png
+output_roi.png
