@@ -64,7 +64,22 @@ provider = best_provider(coords, size=size)
 
 # Get the DTM data as a numpy array.
 np_data = provider.image
+
+# Production-oriented rectangular extraction with structured metadata.
+result = DTMProvider.extract_area(
+    center=coords,
+    width_m=4096,
+    height_m=2048,
+    rotation_deg=30,
+    provider_code=best_provider.code(),
+    fallback_provider_code="srtm30",
+)
+print(result.metadata.model_dump())
 ```
+
+The legacy square API remains available. If you need machine-readable metadata, cache identifiers,
+fallback reporting, or rotated ROI extraction, use `get_result()` on a provider instance or the
+high-level `DTMProvider.extract_area(...)` helper.
 
 ## Overview
 `pydtmdl` is a Python library designed to provide access to Digital Terrain Models (DTMs) from various providers. It supports multiple providers, each with its own resolution and data format. The library allows users to easily retrieve DTM data for specific geographic coordinates and sizes.  
@@ -72,6 +87,10 @@ np_data = provider.image
 Note, that some providers may require additional settings, such as API keys or selection of a specific dataset. More details can be found in the demo script and in the providers source code.  
 
 The library will retrieve all the required tiles, merge them, window them and return the result as a numpy array. If additional processing is required, such as normalization or resizing, it can be done using OpenCV or other libraries (example code is provided in the demo script).
+
+For application backends and worker pipelines, the library also exposes structured result metadata
+including cache information, output file paths, provider fallback details, and machine-readable
+error types.
 
 ## What is a DTM?
 

@@ -31,4 +31,5 @@ disable=raw-checker-failed,
         too-many-branches,
         too-many-nested-blocks,
         cyclic-import,
-        protected-access
+        protected-access,
+        too-many-lines
