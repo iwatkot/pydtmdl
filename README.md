@@ -77,6 +77,8 @@ result = DTMProvider.extract_area(
 print(result.metadata.model_dump())
 ```
 
+Positive `rotation_deg` values rotate the requested ROI clockwise around its center.
+
 The legacy square API remains available. If you need machine-readable metadata, cache identifiers,
 fallback reporting, or rotated ROI extraction, use `get_result()` on a provider instance or the
 high-level `DTMProvider.extract_area(...)` helper.

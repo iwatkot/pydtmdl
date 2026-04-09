@@ -18,12 +18,14 @@ from zipfile import ZipFile
 import numpy as np
 import rasterio
 import requests
+from affine import Affine
 from pydantic import BaseModel
 from pyproj import CRS, Transformer
 from rasterio.enums import Resampling
 from rasterio.mask import mask
 from rasterio.merge import merge
 from rasterio.warp import calculate_default_transform, reproject
+from rasterio.windows import from_bounds
 from requests.exceptions import RequestException
 from tqdm import tqdm
 
@@ -145,6 +147,8 @@ class DTMExtractionResult:
 
 class DTMProvider(ABC):
     """Base class for DTM providers."""
+
+    _cache_version: int = 3
 
     _code: str | None = None
     _name: str | None = None
@@ -268,7 +272,7 @@ class DTMProvider(ABC):
 
     @property
     def rotation_deg(self) -> float:
-        """Rotation of the requested ROI around its center in degrees."""
+        """Rotation of the requested ROI around its center in degrees, clockwise-positive."""
         return self._rotation_deg
 
     @property
@@ -569,10 +573,13 @@ class DTMProvider(ABC):
         height_m: int,
         rotation_deg: float = 0.0,
     ) -> list[tuple[float, float]]:
-        """Build a rectangular ROI polygon in EPSG:4326 as (lon, lat) points."""
+        """Build a rectangular ROI polygon in EPSG:4326 as (lon, lat) points.
+
+        Positive rotation values rotate the ROI clockwise around its center.
+        """
         half_width = width_m / 2.0
         half_height = height_m / 2.0
-        angle_rad = math.radians(rotation_deg)
+        angle_rad = math.radians(-rotation_deg)
         cos_angle = math.cos(angle_rad)
         sin_angle = math.sin(angle_rad)
 
@@ -772,6 +779,7 @@ class DTMProvider(ABC):
     def build_cache_key(self) -> str:
         """Build a stable cache key for the current request geometry."""
         payload = {
+            "cache_version": self._cache_version,
             "provider": self.code(),
             "center": [round(self.coordinates[0], 8), round(self.coordinates[1], 8)],
             "width_m": self.width_m,
@@ -1201,7 +1209,7 @@ class DTMProvider(ABC):
         Returns:
             np.ndarray: Numpy array of the ROI.
         """
-        data, _ = self._mask_roi(tile_path)
+        data, _ = self._extract_roi_raster(tile_path)
         return data[0]
 
     @staticmethod
@@ -1236,14 +1244,19 @@ class DTMProvider(ABC):
         return math.ceil(bbox_width), math.ceil(bbox_height)
 
     @staticmethod
+    def _build_local_crs(coordinates: tuple[float, float]) -> CRS:
+        """Build a local metric CRS centered on the requested ROI."""
+        lat, lon = coordinates
+        return CRS.from_proj4(
+            f"+proj=aeqd +lat_0={lat} +lon_0={lon} +datum=WGS84 +units=m +no_defs"
+        )
+
+    @staticmethod
     def _build_local_transformers(
         coordinates: tuple[float, float],
     ) -> tuple[Transformer, Transformer]:
         """Build local metric transformers centered on the requested ROI."""
-        lat, lon = coordinates
-        local_crs = CRS.from_proj4(
-            f"+proj=aeqd +lat_0={lat} +lon_0={lon} +datum=WGS84 +units=m +no_defs"
-        )
+        local_crs = DTMProvider._build_local_crs(coordinates)
         to_local = Transformer.from_crs("EPSG:4326", local_crs, always_xy=True)
         to_wgs84 = Transformer.from_crs(local_crs, "EPSG:4326", always_xy=True)
         return to_local, to_wgs84
@@ -1402,10 +1415,52 @@ class DTMProvider(ABC):
 
     def _write_result_tiff(self, tile_path: str, output_path: str) -> None:
         """Write the cropped ROI raster to the stable cache path."""
-        data, metadata = self._mask_roi(tile_path)
+        data, metadata = self._extract_roi_raster(tile_path)
         filled_data = data.filled(metadata["nodata"]) if np.ma.isMaskedArray(data) else data
         with rasterio.open(output_path, "w", **metadata) as dst:
             dst.write(filled_data)
+
+    def _extract_roi_raster(self, tile_path: str) -> tuple[np.ma.MaskedArray, dict[str, Any]]:
+        """Extract the requested ROI using the appropriate rasterization path."""
+        if math.isclose(self.rotation_deg % 360, 0.0):
+            return self._crop_axis_aligned_roi(tile_path)
+        return self._resample_rotated_roi(tile_path)
+
+    def _crop_axis_aligned_roi(self, tile_path: str) -> tuple[np.ma.MaskedArray, dict[str, Any]]:
+        """Crop an axis-aligned ROI by bounds to avoid masked border artifacts."""
+        north, south, east, west = self.get_bbox()
+
+        with rasterio.open(tile_path) as src:
+            self.logger.debug("Opened tile, shape: %s, dtype: %s.", src.shape, src.dtypes[0])
+            nodata = self._get_output_nodata(src)
+            window = from_bounds(west, south, east, north, src.transform)
+            window = window.round_offsets().round_lengths()
+            data = src.read(window=window, masked=True)
+            transform = src.window_transform(window)
+            metadata = src.meta.copy()
+            metadata.update(
+                {
+                    "driver": "GTiff",
+                    "height": data.shape[1],
+                    "width": data.shape[2],
+                    "transform": transform,
+                    "nodata": nodata,
+                }
+            )
+
+        if data.size == 0:
+            raise CropExtractionError(
+                "The requested geometry does not contain any data.",
+                provider_code=self.code(),
+                provider_name=self.name(),
+            )
+        if np.ma.isMaskedArray(data) and data.count() == 0:
+            raise CropExtractionError(
+                "The cropped ROI does not contain any valid data.",
+                provider_code=self.code(),
+                provider_name=self.name(),
+            )
+        return data, metadata
 
     def _mask_roi(self, tile_path: str) -> tuple[np.ma.MaskedArray, dict[str, Any]]:
         """Mask a raster to the requested ROI polygon."""
@@ -1426,6 +1481,103 @@ class DTMProvider(ABC):
                     "height": data.shape[1],
                     "width": data.shape[2],
                     "transform": transform,
+                    "nodata": nodata,
+                }
+            )
+
+        if data.size == 0:
+            raise CropExtractionError(
+                "The requested geometry does not contain any data.",
+                provider_code=self.code(),
+                provider_name=self.name(),
+            )
+        if np.ma.isMaskedArray(data) and data.count() == 0:
+            raise CropExtractionError(
+                "The cropped ROI does not contain any valid data.",
+                provider_code=self.code(),
+                provider_name=self.name(),
+            )
+        return data, metadata
+
+    def _resample_rotated_roi(self, tile_path: str) -> tuple[np.ma.MaskedArray, dict[str, Any]]:
+        """Resample a rotated ROI onto an aligned output grid without padded corners."""
+        local_crs = self._build_local_crs(self.coordinates)
+        to_local, _ = self._build_local_transformers(self.coordinates)
+
+        with rasterio.open(tile_path) as src:
+            self.logger.debug("Opened tile, shape: %s, dtype: %s.", src.shape, src.dtypes[0])
+            nodata = self._get_output_nodata(src)
+
+            center_lat, center_lon = self.coordinates
+            center_x, center_y = to_local.transform(center_lon, center_lat)
+            east_x, east_y = to_local.transform(center_lon + abs(src.transform.a), center_lat)
+            south_x, south_y = to_local.transform(center_lon, center_lat + abs(src.transform.e))
+            x_resolution_m = math.hypot(east_x - center_x, east_y - center_y)
+            y_resolution_m = math.hypot(south_x - center_x, south_y - center_y)
+            if x_resolution_m <= 0 or y_resolution_m <= 0:
+                raise CropExtractionError(
+                    "Failed to resolve the rotated ROI output resolution.",
+                    provider_code=self.code(),
+                    provider_name=self.name(),
+                )
+
+            width_px = max(1, math.ceil(self.width_m / x_resolution_m))
+            height_px = max(1, math.ceil(self.height_m / y_resolution_m))
+            pixel_width_m = self.width_m / width_px
+            pixel_height_m = self.height_m / height_px
+
+            angle_rad = math.radians(-self.rotation_deg)
+            cos_angle = math.cos(angle_rad)
+            sin_angle = math.sin(angle_rad)
+            half_width = self.width_m / 2.0
+            half_height = self.height_m / 2.0
+
+            top_left_x = (-half_width * cos_angle) - (half_height * sin_angle)
+            top_left_y = (-half_width * sin_angle) + (half_height * cos_angle)
+            transform = Affine(
+                pixel_width_m * cos_angle,
+                pixel_height_m * sin_angle,
+                top_left_x,
+                pixel_width_m * sin_angle,
+                -pixel_height_m * cos_angle,
+                top_left_y,
+            )
+
+            destination = np.full((1, height_px, width_px), nodata, dtype=np.dtype(src.dtypes[0]))
+            validity = np.zeros((height_px, width_px), dtype=np.uint8)
+
+            reproject(
+                source=rasterio.band(src, 1),
+                destination=destination[0],
+                src_transform=src.transform,
+                src_crs=src.crs,
+                src_nodata=src.nodata,
+                dst_transform=transform,
+                dst_crs=local_crs,
+                dst_nodata=nodata,
+                resampling=Resampling.bilinear,
+            )
+            reproject(
+                source=src.read_masks(1),
+                destination=validity,
+                src_transform=src.transform,
+                src_crs=src.crs,
+                src_nodata=0,
+                dst_transform=transform,
+                dst_crs=local_crs,
+                dst_nodata=0,
+                resampling=Resampling.nearest,
+            )
+
+            data = np.ma.array(destination, mask=validity[np.newaxis, ...] == 0)
+            metadata = src.meta.copy()
+            metadata.update(
+                {
+                    "driver": "GTiff",
+                    "height": height_px,
+                    "width": width_px,
+                    "transform": transform,
+                    "crs": local_crs,
                     "nodata": nodata,
                 }
             )

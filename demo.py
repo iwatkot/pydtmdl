@@ -46,7 +46,7 @@ provider = best_provider(coords, size=size)
 # Remember to handle exceptions if the provider does not have data for the given coordinates.
 # In this case, it's recommended to try another provider (from the list of available providers).
 try:
-    np_data = provider.image
+    np_data = provider.get_numpy()
 except ValueError as e:
     raise e
 
