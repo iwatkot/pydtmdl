@@ -1,16 +1,16 @@
-import os
+"""DTM provider for the Netherlands using AHN5 elevation data."""
 import json
+import os
 from datetime import datetime, timedelta
 
 import numpy as np
-import requests
 import rasterio
+import requests
+from pydtmdl.base.dtm import DTMProvider
 from pyproj import Transformer
 from rasterio.fill import fillnodata
 from rasterio.merge import merge as rasterio_merge
-from rasterio.warp import calculate_default_transform, reproject, Resampling
-
-from pydtmdl.base.dtm import DTMProvider
+from rasterio.warp import Resampling, calculate_default_transform, reproject
 
 
 def _log(logger, level: str, msg: str, *args):
@@ -20,6 +20,7 @@ def _log(logger, level: str, msg: str, *args):
 
 
 class NetherlandsProvider(DTMProvider):
+    """DTM provider for the Netherlands using the AHN5 0.5m resolution dataset."""
 
     _code = "netherlands"
     _name = "Netherlands AHN5"
@@ -74,12 +75,17 @@ class NetherlandsProvider(DTMProvider):
             _log(
                 self.logger,
                 "debug",
-                "[index] Saved kaartbladindex (%d bytes) → %s",
+                "[index] Saved kaartbladindex (%d bytes)  %s",
                 len(resp.content),
                 self._index_cache_path,
             )
         else:
-            _log(self.logger, "debug", "[index] Using cached kaartbladindex: %s", self._index_cache_path)
+            _log(
+                self.logger,
+                "debug",
+                "[index] Using cached kaartbladindex: %s",
+                self._index_cache_path,
+            )
 
         _log(self.logger, "debug", "[index] Parsing kaartbladindex JSON…")
 
@@ -110,7 +116,7 @@ class NetherlandsProvider(DTMProvider):
         _log(
             self.logger,
             "debug",
-            "[bbox] WGS84 → N=%.5f S=%.5f E=%.5f W=%.5f",
+            "[bbox] WGS84  N=%.5f S=%.5f E=%.5f W=%.5f",
             north,
             south,
             east,
@@ -128,7 +134,7 @@ class NetherlandsProvider(DTMProvider):
         _log(
             self.logger,
             "debug",
-            "[bbox] RD28992 → xmin=%.1f ymin=%.1f xmax=%.1f ymax=%.1f",
+            "[bbox] RD28992  xmin=%.1f ymin=%.1f xmax=%.1f ymax=%.1f",
             *bbox,
         )
         return bbox
@@ -150,7 +156,7 @@ class NetherlandsProvider(DTMProvider):
             _log(
                 self.logger,
                 "debug",
-                "[select] ✓ Tile %s intersects",
+                "[select] Tile %s intersects",
                 tile.get("kaartbladNr", "?"),
             )
             urls.append(tile["url"])
@@ -167,7 +173,14 @@ class NetherlandsProvider(DTMProvider):
             out_path = os.path.join(raw_dir, fname)
 
             if os.path.exists(out_path):
-                _log(self.logger, "debug", "[download] (%d/%d) Cache hit: %s", idx, total, fname)
+                _log(
+                    self.logger,
+                    "debug",
+                    "[download] (%d/%d) Cache hit: %s",
+                    idx,
+                    total,
+                    fname,
+                )
                 downloaded.append(out_path)
                 continue
 
@@ -203,7 +216,7 @@ class NetherlandsProvider(DTMProvider):
         os.makedirs(filled_dir, exist_ok=True)
         out_path = os.path.join(filled_dir, filled_name)
 
-        tag = "[fill] (%d/%d) %s" % (tile_idx, tile_total, os.path.basename(src_path))
+        tag = f"[fill] ({tile_idx}/{tile_total}) {os.path.basename(src_path)}"
 
         if os.path.exists(out_path):
             _log(self.logger, "debug", "%s — cache hit, skipping.", tag)
@@ -216,7 +229,11 @@ class NetherlandsProvider(DTMProvider):
             nodata = src.nodata
             profile = src.profile.copy()
 
-        valid_mask = (data != nodata).astype(np.uint8) if nodata is not None else (~np.isnan(data)).astype(np.uint8)
+        valid_mask = (
+            (data != nodata).astype(np.uint8)
+            if nodata is not None
+            else (~np.isnan(data)).astype(np.uint8)
+        )
         data[valid_mask == 0] = 0.0
 
         filled = fillnodata(
@@ -302,7 +319,9 @@ class NetherlandsProvider(DTMProvider):
 
         raw_tiles = self._download_tiles_with_logging(urls, raw_dir)
 
-        filled_tiles = [self._fill_gaps(p, i + 1, len(raw_tiles)) for i, p in enumerate(raw_tiles)]
+        filled_tiles = [
+            self._fill_gaps(p, i + 1, len(raw_tiles)) for i, p in enumerate(raw_tiles)
+        ]
         self.merge_geotiff(filled_tiles)
 
         _log(self.logger, "debug", "[pipeline] DONE")
