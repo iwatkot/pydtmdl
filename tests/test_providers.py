@@ -17,6 +17,7 @@ os.makedirs(tiles_directory, exist_ok=True)
 
 COORDINATE_CASES = {
     # "arctic": (70.0, -50.0),  # Northern Greenland # * Too big tiles for tests.
+    "austria": (48.2082, 16.3738),  # Vienna area, Austria
     "baden": (48.5, 9.0),  # Stuttgart area, Germany
     "bavaria": (48.0, 11.5),  # Munich area, Germany
     "canada": (50.0, -100.0),  # Central Canada

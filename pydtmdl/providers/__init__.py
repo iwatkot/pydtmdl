@@ -1,5 +1,6 @@
 # pylint: disable=missing-module-docstring
 from pydtmdl.providers.arctic import ArcticProvider
+from pydtmdl.providers.austria import AustriaProvider
 from pydtmdl.providers.baden import BadenWurttembergProvider
 from pydtmdl.providers.bavaria import BavariaProvider
 from pydtmdl.providers.canada import CanadaProvider
