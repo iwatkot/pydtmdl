@@ -6,11 +6,12 @@ from datetime import datetime, timedelta
 import numpy as np
 import rasterio
 import requests
-from pydtmdl.base.dtm import DTMProvider
 from pyproj import Transformer
 from rasterio.fill import fillnodata
 from rasterio.merge import merge as rasterio_merge
 from rasterio.warp import Resampling, calculate_default_transform, reproject
+from pydtmdl.base.dtm import DTMProvider
+
 
 
 def _log(logger, level: str, msg: str, *args):
@@ -75,7 +76,7 @@ class NetherlandsProvider(DTMProvider):
             _log(
                 self.logger,
                 "debug",
-                "[index] Saved kaartbladindex (%d bytes)  %s",
+                "[index] Saved kaartbladindex (%d bytes) → %s",
                 len(resp.content),
                 self._index_cache_path,
             )
@@ -116,7 +117,7 @@ class NetherlandsProvider(DTMProvider):
         _log(
             self.logger,
             "debug",
-            "[bbox] WGS84  N=%.5f S=%.5f E=%.5f W=%.5f",
+            "[bbox] WGS84 → N=%.5f S=%.5f E=%.5f W=%.5f",
             north,
             south,
             east,
@@ -134,7 +135,7 @@ class NetherlandsProvider(DTMProvider):
         _log(
             self.logger,
             "debug",
-            "[bbox] RD28992  xmin=%.1f ymin=%.1f xmax=%.1f ymax=%.1f",
+            "[bbox] RD28992 → xmin=%.1f ymin=%.1f xmax=%.1f ymax=%.1f",
             *bbox,
         )
         return bbox
@@ -156,7 +157,7 @@ class NetherlandsProvider(DTMProvider):
             _log(
                 self.logger,
                 "debug",
-                "[select] Tile %s intersects",
+                "[select] ✓ Tile %s intersects",
                 tile.get("kaartbladNr", "?"),
             )
             urls.append(tile["url"])
@@ -206,6 +207,7 @@ class NetherlandsProvider(DTMProvider):
 
             except Exception as exc:
                 _log(self.logger, "error", "[download] FAILED %s: %s", url, exc)
+                raise
 
         _log(self.logger, "debug", "[download] Done: %d/%d", len(downloaded), total)
         return downloaded
@@ -262,7 +264,8 @@ class NetherlandsProvider(DTMProvider):
                 os.remove(p)
 
         datasets = [rasterio.open(f) for f in input_files]
-        mosaic, out_transform = rasterio_merge(datasets, nodata=0)
+        nodata = datasets[0].nodata  # assume consistent across tiles
+        mosaic, out_transform = rasterio_merge(datasets, nodata=nodata)
 
         out_meta = datasets[0].meta.copy()
         out_meta.update(
@@ -291,15 +294,16 @@ class NetherlandsProvider(DTMProvider):
             kwargs.update(crs=dst_crs, transform=transform, width=width, height=height)
 
             with rasterio.open(reprojected_path, "w", **kwargs) as dst:
-                reproject(
-                    source=rasterio.band(src, 1),
-                    destination=rasterio.band(dst, 1),
-                    src_transform=src.transform,
-                    src_crs=src.crs,
-                    dst_transform=transform,
-                    dst_crs=dst_crs,
-                    resampling=Resampling.bilinear,
-                )
+                for band_index in range(1, src.count + 1):
+                    reproject(
+                        source=rasterio.band(src, band_index),
+                        destination=rasterio.band(dst, band_index),
+                        src_transform=src.transform,
+                        src_crs=src.crs,
+                        dst_transform=transform,
+                        dst_crs=dst_crs,
+                        resampling=Resampling.bilinear,
+                    )
 
         _log(self.logger, "info", "Merge + reprojection complete")
 
@@ -318,11 +322,13 @@ class NetherlandsProvider(DTMProvider):
         os.makedirs(raw_dir, exist_ok=True)
 
         raw_tiles = self._download_tiles_with_logging(urls, raw_dir)
+        if not raw_tiles:
+            raise RuntimeError("Failed to download any AHN5 tiles.")
 
         filled_tiles = [
             self._fill_gaps(p, i + 1, len(raw_tiles)) for i, p in enumerate(raw_tiles)
         ]
-        self.merge_geotiff(filled_tiles)
+        #self.merge_geotiff(filled_tiles)
 
         _log(self.logger, "debug", "[pipeline] DONE")
 
