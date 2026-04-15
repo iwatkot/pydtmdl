@@ -171,6 +171,15 @@ class DTMProvider(ABC):
     _retry_pause: int = 5
     _output_crs: str = "EPSG:4326"
 
+    @classmethod
+    def _is_imagery_provider_class(cls, provider: type[Any]) -> bool:
+        """Return whether the given class belongs to the imagery provider tree."""
+        try:
+            from pydtmdl.base.imagery import ImageryProvider
+        except ImportError:
+            return False
+        return issubclass(provider, ImageryProvider)
+
     def __init__(
         self,
         coordinates: tuple[float, float],
@@ -373,6 +382,8 @@ class DTMProvider(ABC):
             DTMProvider: Provider class or None if not found.
         """
         for provider in cls._all_provider_classes():
+            if cls is DTMProvider and cls._is_imagery_provider_class(provider):
+                continue
             if provider.code() == code:
                 return provider
         return None
@@ -388,6 +399,8 @@ class DTMProvider(ABC):
             DTMProvider: Provider class or None if not found.
         """
         for provider in cls._all_provider_classes():
+            if cls is DTMProvider and cls._is_imagery_provider_class(provider):
+                continue
             if provider.name() == name:
                 return provider
         return None
@@ -444,7 +457,9 @@ class DTMProvider(ABC):
         return [
             provider
             for provider in cls._all_provider_classes()
-            if provider not in base_providers and not provider.__subclasses__()
+            if provider not in base_providers
+            and not provider.__subclasses__()
+            and not cls._is_imagery_provider_class(provider)
         ]
 
     @classmethod

@@ -1,4 +1,5 @@
 # pylint: disable=missing-module-docstring
+import pydtmdl.imagery_providers
 import pydtmdl.providers
 from pydtmdl.base.dtm import (
     AuthConfigMissingError,
@@ -12,4 +13,10 @@ from pydtmdl.base.dtm import (
     OutsideCoverageError,
     ProviderUnavailableError,
     ReprojectionFailedError,
+)
+from pydtmdl.base.imagery import (
+    ImageryExtractionResult,
+    ImageryProvider,
+    ImageryProviderSettings,
+    ImageryResultMetadata,
 )
