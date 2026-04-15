@@ -176,10 +176,10 @@ class Sentinel2L2AImageryProvider(ImageryProvider):
         )
 
         stretch = max(1, settings.reflectance_max - settings.reflectance_min)
-        rgb = (rgb - settings.reflectance_min) / stretch
-        rgb = np.clip(rgb, 0.0, 1.0)
+        rgb = ((rgb - settings.reflectance_min) / stretch).astype(np.float32)
+        rgb = np.clip(rgb, 0.0, 1.0).astype(np.float32)
         if settings.gamma > 0 and not np.isclose(settings.gamma, 1.0):
-            rgb = np.power(rgb, 1.0 / settings.gamma)
+            rgb = np.power(rgb, 1.0 / settings.gamma).astype(np.float32)
         rgb = np.round(rgb * 255.0).astype(np.uint8)
         rgb = np.ma.array(rgb, mask=np.broadcast_to(invalid_mask, rgb.shape))
 

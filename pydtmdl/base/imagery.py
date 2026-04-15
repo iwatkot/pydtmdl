@@ -18,13 +18,10 @@ from rasterio.enums import Resampling
 from rasterio.warp import reproject
 
 from pydtmdl.base.dtm import (
-    AuthConfigMissingError,
     CropExtractionError,
     DTMErrorDetails,
     DTMProvider,
-    DTMProviderError,
     DTMProviderSettings,
-    OutsideCoverageError,
     ProviderUnavailableError,
 )
 
@@ -93,7 +90,7 @@ class ImageryProvider(DTMProvider):
         return cls._dataset
 
     @classmethod
-    def _all_provider_classes(cls) -> list[Type[ImageryProvider]]:
+    def _all_provider_classes(cls) -> list[Type[ImageryProvider]]:  # type: ignore[override]
         """Collect all imagery provider classes from the imagery inheritance tree."""
         providers: list[Type[ImageryProvider]] = []
         seen: set[type[Any]] = set()
@@ -111,7 +108,7 @@ class ImageryProvider(DTMProvider):
         return providers
 
     @classmethod
-    def get_non_base_providers(cls) -> list[Type[ImageryProvider]]:
+    def get_non_base_providers(cls) -> list[Type[ImageryProvider]]:  # type: ignore[override]
         """Get all non-base imagery providers."""
         return [
             provider for provider in cls._all_provider_classes() if not provider.__subclasses__()
@@ -153,7 +150,7 @@ class ImageryProvider(DTMProvider):
         return hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:24]
 
     @classmethod
-    def extract_area(
+    def extract_area(  # type: ignore[override]
         cls,
         center: tuple[float, float],
         width_m: int,
@@ -315,7 +312,7 @@ class ImageryProvider(DTMProvider):
             )
         return data, metadata
 
-    def _build_result_from_output(
+    def _build_result_from_output(  # type: ignore[override]
         self,
         output_path: str,
         requested_provider_code: str,
@@ -363,7 +360,7 @@ class ImageryProvider(DTMProvider):
             )
         return ImageryExtractionResult(data=data, metadata=metadata)
 
-    def _write_result_metadata(self, metadata: ImageryResultMetadata) -> None:
+    def _write_result_metadata(self, metadata: ImageryResultMetadata) -> None:  # type: ignore[override]
         """Persist imagery metadata next to the cached raster output."""
         with open(self._metadata_path, "w", encoding="utf-8") as metadata_file:
             metadata_file.write(metadata.model_dump_json(indent=2))
@@ -373,7 +370,7 @@ class ImageryProvider(DTMProvider):
         cached_metadata = self._load_cached_metadata()
         return cached_metadata.source_files if cached_metadata else []
 
-    def _load_cached_metadata(self) -> ImageryResultMetadata | None:
+    def _load_cached_metadata(self) -> ImageryResultMetadata | None:  # type: ignore[override]
         """Load imagery metadata from the cache directory if it exists and is valid."""
         if not os.path.exists(self._metadata_path):
             return None
