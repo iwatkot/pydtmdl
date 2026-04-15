@@ -9,6 +9,7 @@ import rasterio
 from rasterio.transform import from_bounds
 
 from pydtmdl import DTMProvider, ImageryProvider
+from pydtmdl.imagery_providers.naip import NAIPImageryProvider, NAIPImagerySettings
 from pydtmdl.imagery_providers.sentinel2 import (
     Sentinel2L2AImageryProvider,
     Sentinel2L2AImagerySettings,
@@ -38,6 +39,28 @@ def _write_rgb_raster(path: Path) -> Path:
         crs="EPSG:4326",
         transform=transform,
         nodata=0,
+    ) as dataset:
+        dataset.write(data)
+    return path
+
+
+def _write_rgbir_raster(path: Path) -> Path:
+    red = np.full((200, 200), 180, dtype=np.uint8)
+    green = np.full((200, 200), 150, dtype=np.uint8)
+    blue = np.full((200, 200), 120, dtype=np.uint8)
+    nir = np.full((200, 200), 200, dtype=np.uint8)
+    data = np.stack([red, green, blue, nir])
+    transform = from_bounds(-105.25, 39.99, -105.18, 40.06, 200, 200)
+    with rasterio.open(
+        path,
+        "w",
+        driver="GTiff",
+        height=200,
+        width=200,
+        count=4,
+        dtype=data.dtype,
+        crs="EPSG:4326",
+        transform=transform,
     ) as dataset:
         dataset.write(data)
     return path
@@ -161,3 +184,44 @@ def test_sentinel_provider_renders_local_assets_with_cloud_mask(tmp_path: Path, 
     assert result.metadata.dtype == "uint8"
     assert np.ma.isMaskedArray(result.data)
     assert np.ma.getmaskarray(result.data).any()
+
+
+def test_naip_provider_renders_local_rgb_asset(tmp_path: Path, monkeypatch):
+    naip_path = tmp_path / "naip.tif"
+    _write_rgbir_raster(naip_path)
+
+    item = {
+        "id": "naip-scene-1",
+        "properties": {
+            "datetime": "2023-09-25T16:00:00Z",
+            "gsd": 0.3,
+        },
+        "assets": {
+            "image": {"href": str(naip_path)},
+        },
+    }
+
+    def fake_search_items(self, settings):
+        return [item]
+
+    monkeypatch.setattr(NAIPImageryProvider, "_search_items", fake_search_items)
+
+    result = NAIPImageryProvider.extract_area(
+        center=(40.03, -105.22),
+        width_m=1500,
+        height_m=1500,
+        provider_code=NAIPImageryProvider.code(),
+        user_settings=NAIPImagerySettings(
+            date_from="2020-01-01",
+            date_to="2026-12-31",
+            max_items=1,
+        ),
+        directory=str(tmp_path),
+    )
+
+    assert result.metadata.actual_provider == NAIPImageryProvider.code()
+    assert result.metadata.band_count == 3
+    assert result.metadata.scene_ids == ["naip-scene-1"]
+    assert result.metadata.dtype == "uint8"
+    assert result.data.shape[0] == 3
+    assert np.ma.isMaskedArray(result.data)

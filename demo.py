@@ -1,6 +1,7 @@
 import cv2
 
 from pydtmdl import DTMProvider, ImageryProvider
+from pydtmdl.imagery_providers.naip import NAIPImagerySettings
 from pydtmdl.imagery_providers.sentinel2 import Sentinel2L2AImagerySettings
 
 # 1️⃣ Create a virtual environment and install pydtmdl
@@ -76,25 +77,41 @@ np_data = cv2.resize(np_data, (size, size), interpolation=cv2.INTER_LINEAR)
 roi_preview = cv2.normalize(result.data.filled(0), None, 0, 255, cv2.NORM_MINMAX).astype("uint8")
 
 # Optional: extract Sentinel-2 RGB imagery for the same ROI.
-imagery_result = ImageryProvider.extract_area(
-    center=coords,
-    width_m=4096,
-    height_m=2048,
-    rotation_deg=30,
-    provider_code="sentinel2_l2a",
-    # user_settings=Sentinel2L2AImagerySettings(
-    #     date_from="2024-01-01",
-    #     date_to="2024-12-31",
-    #     max_cloud_cover=15,
-    #     max_items=6,
-    # ),
-)
-print(imagery_result.metadata.model_dump())
+# imagery_result = ImageryProvider.extract_area(
+#     center=coords,
+#     width_m=4096,
+#     height_m=2048,
+#     rotation_deg=30,
+#     provider_code="sentinel2_l2a",
+#     # user_settings=Sentinel2L2AImagerySettings(
+#     #     date_from="2024-01-01",
+#     #     date_to="2024-12-31",
+#     #     max_cloud_cover=15,
+#     #     max_items=6,
+#     # ),
+# )
+# print(imagery_result.metadata.model_dump())
 
-imagery_preview = imagery_result.data.filled(0)
-imagery_preview = cv2.cvtColor(imagery_preview.transpose(1, 2, 0), cv2.COLOR_RGB2BGR)
+# imagery_preview = imagery_result.data.filled(0)
+# imagery_preview = cv2.cvtColor(imagery_preview.transpose(1, 2, 0), cv2.COLOR_RGB2BGR)
 
 # Save the processed data to a file.
 cv2.imwrite("output.png", np_data)
 cv2.imwrite("output_roi.png", roi_preview)
-cv2.imwrite("output_satellite.png", imagery_preview)
+# cv2.imwrite("output_satellite.png", imagery_preview)
+
+# Example: NAIP high-resolution orthophoto for the contiguous United States.
+naip_coords = (40.03, -105.22)
+naip_result = ImageryProvider.extract_area(
+    center=naip_coords,
+    width_m=2048,
+    height_m=2048,
+    provider_code="naip",
+    user_settings=NAIPImagerySettings(
+        date_from="2020-01-01",
+        date_to="2026-12-31",
+        max_items=8,
+    ),
+)
+naip_preview = cv2.cvtColor(naip_result.data.filled(0).transpose(1, 2, 0), cv2.COLOR_RGB2BGR)
+cv2.imwrite("output_naip.png", naip_preview)
