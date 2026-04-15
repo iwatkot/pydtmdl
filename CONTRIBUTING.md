@@ -14,6 +14,7 @@ If you encounter any issues while using PyDTMDL, please follow these steps to re
    - Coordinates of the center point
    - Size of the region
    - Provider being used
+   - Whether the issue is about DTM, imagery, or a local raster extraction
    - Error message if any
    - Stack trace if available
    - Screenshots if possible
@@ -83,6 +84,21 @@ All methods, functions and classes must have type hints (including generic types
 
 If you're interested in adding a new DTM provider, please refer to the [Contributing section in the README](README.md#contributing) for detailed instructions on how to implement a DTM provider.
 
+## Adding a New Imagery Provider
+
+If you're interested in adding a new imagery provider, follow the same general workflow as for DTM
+providers, but inherit from `ImageryProvider` instead of `DTMProvider`.
+
+Imagery providers should:
+- Expose a clear dataset name and coverage extent
+- Return georeferenced raster files readable by `rasterio`
+- Reuse the shared ROI extraction path instead of implementing their own crop/rotation logic
+- Keep provider-specific configuration in a dedicated settings model when needed
+- Be explicit about licensing and commercial-use caveats in the provider documentation or code comments
+
+If the user already has a georeferenced raster file, prefer the built-in `extract_area_from_image(...)`
+helper instead of adding a provider just to wrap a local file.
+
 ### ⚠️ Critical Requirements for DTM Providers
 
 When adding a new DTM provider, you **must** follow these requirements:
@@ -105,6 +121,22 @@ When adding a new DTM provider, you **must** follow these requirements:
 4. **Follow Existing Patterns**: Review similar providers in [pydtmdl/providers/](https://github.com/iwatkot/pydtmdl/tree/main/pydtmdl/providers) to understand the correct implementation patterns.
 
 **Pull requests that implement custom download logic will not be accepted.** This requirement ensures maintainability, consistency, and reliability across all providers.
+
+### ⚠️ Critical Requirements for Imagery Providers
+
+When adding a new imagery provider, you should follow the same design principles:
+
+1. **Reuse Shared Extraction Logic**: Do not implement custom crop/rotation pipelines if the base
+   `ImageryProvider` already handles them.
+
+2. **Keep Provider Logic Focused on Acquisition**: The provider should mainly answer two questions:
+   how to find the source imagery and how to return crop-ready georeferenced raster files.
+
+3. **Use Stable Cache Inputs**: If provider settings affect the visual output, include them in the
+   cache key payload so stale results are not reused.
+
+4. **Document Licensing Clearly**: Imagery services vary widely in licensing. If terms are not clearly
+   compatible with the project goals, do not add the provider.
 
 ## Submitting a Pull Request
 

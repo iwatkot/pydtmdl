@@ -25,6 +25,7 @@
     <a href="#overview">Overview</a> • 
     <a href="#what-is-a-dtm">What is a DTM?</a> •
     <a href="#supported-dtm-providers">Supported DTM providers</a> •
+    <a href="#supported-imagery-providers">Supported Imagery Providers</a> •
     <a href="#licensing-and-data-usage">Licensing and Data Usage</a> •
     <a href="#contributing">Contributing</a>
 </p>
@@ -49,7 +50,8 @@ pip install pydtmdl
 Then, you can use it in your Python scripts:
 
 ```python
-from pydtmdl import DTMProvider
+from pydtmdl import DTMProvider, ImageryProvider, extract_area_from_image
+from pydtmdl.imagery_providers.sentinel2 import Sentinel2L2AImagerySettings
 
 # Prepare coordinates of the center point and size (in meters).
 coords = 45.285460396731374, 20.237491178279715  # Center point of the region of interest.
@@ -75,6 +77,27 @@ result = DTMProvider.extract_area(
     fallback_provider_code="srtm30",
 )
 print(result.metadata.model_dump())
+
+# Global imagery fallback with Sentinel-2.
+imagery = ImageryProvider.extract_area(
+    center=coords,
+    width_m=4096,
+    height_m=2048,
+    rotation_deg=30,
+    provider_code="sentinel2_l2a",
+    user_settings=Sentinel2L2AImagerySettings(max_items=4),
+)
+print(imagery.metadata.model_dump())
+
+# Extract the same kind of ROI from your own georeferenced raster.
+local = extract_area_from_image(
+    image_path="my_raster.tif",
+    center=coords,
+    width_m=4096,
+    height_m=2048,
+    rotation_deg=30,
+)
+print(local.metadata.model_dump())
 ```
 
 Positive `rotation_deg` values rotate the requested ROI clockwise around its center.
@@ -83,8 +106,11 @@ The legacy square API remains available. If you need machine-readable metadata, 
 fallback reporting, or rotated ROI extraction, use `get_result()` on a provider instance or the
 high-level `DTMProvider.extract_area(...)` helper.
 
+The same rectangular ROI workflow is also available for imagery providers and for user-provided
+georeferenced rasters via `ImageryProvider.extract_area(...)` and `extract_area_from_image(...)`.
+
 ## Overview
-`pydtmdl` is a Python library designed to provide access to Digital Terrain Models (DTMs) from various providers. It supports multiple providers, each with its own resolution and data format. The library allows users to easily retrieve DTM data for specific geographic coordinates and sizes.  
+`pydtmdl` is a Python library designed to provide access to Digital Terrain Models (DTMs) and raster imagery from various providers. It supports multiple providers, each with its own resolution and data format. The library allows users to easily retrieve terrain or imagery data for specific geographic coordinates and sizes.  
 
 Note, that some providers may require additional settings, such as API keys or selection of a specific dataset. More details can be found in the demo script and in the providers source code.  
 
@@ -93,6 +119,9 @@ The library will retrieve all the required tiles, merge them, window them and re
 For application backends and worker pipelines, the library also exposes structured result metadata
 including cache information, output file paths, provider fallback details, and machine-readable
 error types.
+
+In addition to remote providers, the library can also extract identical rotated ROIs from your own
+georeferenced GeoTIFF or COG files using `extract_area_from_image(...)`.
 
 ## What is a DTM?
 
@@ -142,12 +171,58 @@ In addition to SRTM 30m, which provides global coverage, the map above highlight
 | 🇨🇿 Czech Republic                  | 2 meter      | [VidhosticeSDK](https://github.com/VidhosticeSDK) |
 | 🇱🇹 Lithuania                       | 1 meter      | [Tox3](https://github.com/Tox3) |
 
+## Supported Imagery Providers
+
+The imagery stack uses the same rectangular ROI API as the DTM stack, including rotation,
+structured metadata, and local caching.
+
+| Provider Name               | Coverage                    | Resolution | Notes |
+| --------------------------- | --------------------------- | ---------- | ----- |
+| Sentinel-2 L2A RGB          | Global land coverage        | 10 meters  | Free global fallback built from public STAC + COG assets |
+| NAIP RGB                    | Contiguous United States    | 0.3-0.6 m  | High-resolution USDA orthophotos, public domain |
+| Local Raster                | User-provided georeferenced raster | source-dependent | Extract the same rotated ROI from your own GeoTIFF/COG |
+
+Example imagery usage:
+
+```python
+from pydtmdl import ImageryProvider
+from pydtmdl.imagery_providers.naip import NAIPImagerySettings
+
+result = ImageryProvider.extract_area(
+    center=(40.03, -105.22),
+    width_m=2048,
+    height_m=2048,
+    provider_code="naip",
+    user_settings=NAIPImagerySettings(
+        date_from="2020-01-01",
+        date_to="2026-12-31",
+        max_items=8,
+    ),
+)
+print(result.metadata.model_dump())
+```
+
+Example local raster usage:
+
+```python
+from pydtmdl import extract_area_from_image
+
+result = extract_area_from_image(
+    image_path="my_raster.tif",
+    center=(45.285460396731374, 20.237491178279715),
+    width_m=4096,
+    height_m=2048,
+    rotation_deg=30,
+)
+print(result.metadata.model_dump())
+```
+
 ## Licensing and Data Usage
 
-⚠️ **Important**: This library provides access to DTM data from various third-party providers. **PyDTMDL does not own, host, or distribute this data**. Each DTM provider has its own licensing terms and usage restrictions.
+⚠️ **Important**: This library provides access to DTM and imagery data from various third-party providers. **PyDTMDL does not own, host, or distribute this data**. Each provider has its own licensing terms and usage restrictions.
 
 **It is your responsibility to:**
-- Check the license and terms of use for each DTM provider you use
+- Check the license and terms of use for each DTM or imagery provider you use
 - Ensure compliance with the provider's licensing requirements
 - Verify that your use case (commercial, research, personal, etc.) is permitted
 - Provide proper attribution when required by the data provider
@@ -161,7 +236,7 @@ For information about data licensing from specific providers, please refer to th
 
 ## Contributing
 
-Contributions are welcome! If you want to add your own DTM provider, please follow this guide.  
+Contributions are welcome! If you want to add your own DTM or imagery provider, please follow this guide.  
 You can also contribute by reporting issues, suggesting improvements, or helping with documentation.
 
 ### What a DTM provider does?
@@ -177,6 +252,22 @@ The process for generating elevation data is:
 3. Reproject to EPSG:4326 if needed (handled by base class)
 4. Extract the map area from the tile (handled by base class)
 
+### What an imagery provider does?
+
+An imagery provider follows the same ROI extraction contract, but returns raster imagery instead of
+elevation values. The base imagery class, [ImageryProvider](pydtmdl/base/imagery.py), reuses the
+same crop, rotation, caching and metadata patterns as `DTMProvider`.
+
+The process for generating imagery data is:
+
+1. Download or locate all imagery tiles covering the desired map area
+2. Merge multiple source tiles if necessary
+3. Reproject to EPSG:4326 if needed
+4. Extract the rotated ROI from the merged raster
+
+If you already have your own georeferenced raster file, use `extract_area_from_image(...)` instead
+of implementing a provider.
+
 ### Provider Types
 
 There are three main approaches to implementing a DTM provider:
@@ -184,6 +275,10 @@ There are three main approaches to implementing a DTM provider:
 1. **Custom implementation** - Inherit from `DTMProvider` directly for unique APIs
 2. **WCS-based** - Inherit from both `WCSProvider` and `DTMProvider` for OGC WCS services
 3. **WMS-based** - Inherit from both `WMSProvider` and `DTMProvider` for OGC WMS services
+
+For imagery providers, the simplest approach is usually a custom implementation inheriting from
+`ImageryProvider`, as shown by the Sentinel-2 and NAIP providers in
+[pydtmdl/imagery_providers/](pydtmdl/imagery_providers/).
 
 ### Example 1: Custom Provider (SRTM)
 
