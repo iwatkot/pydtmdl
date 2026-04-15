@@ -21,7 +21,10 @@ from pydtmdl.base.imagery import (
     ImageryResultMetadata,
 )
 from pydtmdl.base.local_raster import (
+    LocalDTMProvider,
     LocalRasterProvider,
     LocalRasterSettings,
+    extract_area_from_dtm,
     extract_area_from_image,
+    extract_area_from_imagery,
 )

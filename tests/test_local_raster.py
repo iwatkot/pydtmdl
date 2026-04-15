@@ -6,7 +6,7 @@ import numpy as np
 import rasterio
 from rasterio.transform import from_bounds
 
-from pydtmdl import extract_area_from_image
+from pydtmdl import extract_area_from_dtm, extract_area_from_image, extract_area_from_imagery
 
 
 def _write_single_band_raster(path: Path) -> Path:
@@ -50,10 +50,10 @@ def _write_rgb_raster(path: Path) -> Path:
     return path
 
 
-def test_extract_area_from_image_single_band_returns_2d_result(tmp_path: Path):
+def test_extract_area_from_dtm_single_band_returns_2d_result(tmp_path: Path):
     source_path = _write_single_band_raster(tmp_path / "single_band.tif")
 
-    result = extract_area_from_image(
+    result = extract_area_from_dtm(
         image_path=str(source_path),
         center=(0.0, 0.0),
         width_m=2000,
@@ -62,24 +62,23 @@ def test_extract_area_from_image_single_band_returns_2d_result(tmp_path: Path):
         directory=str(tmp_path),
     )
 
-    assert result.metadata.actual_provider == "local_raster"
-    assert result.metadata.band_count == 1
+    assert result.metadata.actual_provider == "local_dtm"
     assert result.data.ndim == 2
     assert np.ma.isMaskedArray(result.data)
     assert Path(result.metadata.output_path).exists()
 
 
-def test_extract_area_from_image_multiband_returns_cached_rgb_stack(tmp_path: Path):
+def test_extract_area_from_imagery_multiband_returns_cached_rgb_stack(tmp_path: Path):
     source_path = _write_rgb_raster(tmp_path / "rgb.tif")
 
-    first = extract_area_from_image(
+    first = extract_area_from_imagery(
         image_path=str(source_path),
         center=(0.0, 0.0),
         width_m=1500,
         height_m=1500,
         directory=str(tmp_path),
     )
-    second = extract_area_from_image(
+    second = extract_area_from_imagery(
         image_path=str(source_path),
         center=(0.0, 0.0),
         width_m=1500,
@@ -92,3 +91,26 @@ def test_extract_area_from_image_multiband_returns_cached_rgb_stack(tmp_path: Pa
     assert first.metadata.cache_hit is False
     assert second.metadata.cache_hit is True
     assert first.metadata.cache_key == second.metadata.cache_key
+
+
+def test_extract_area_from_image_alias_matches_imagery_wrapper(tmp_path: Path):
+    source_path = _write_rgb_raster(tmp_path / "alias_rgb.tif")
+
+    aliased = extract_area_from_image(
+        image_path=str(source_path),
+        center=(0.0, 0.0),
+        width_m=1000,
+        height_m=1000,
+        directory=str(tmp_path),
+    )
+    direct = extract_area_from_imagery(
+        image_path=str(source_path),
+        center=(0.0, 0.0),
+        width_m=1000,
+        height_m=1000,
+        directory=str(tmp_path),
+    )
+
+    assert aliased.metadata.actual_provider == "local_raster"
+    assert aliased.metadata.cache_key == direct.metadata.cache_key
+    assert aliased.data.shape == direct.data.shape

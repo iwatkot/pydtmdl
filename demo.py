@@ -1,6 +1,11 @@
 import cv2
 
-from pydtmdl import DTMProvider, ImageryProvider, extract_area_from_image
+from pydtmdl import (
+    DTMProvider,
+    ImageryProvider,
+    extract_area_from_dtm,
+    extract_area_from_imagery,
+)
 from pydtmdl.imagery_providers.naip import NAIPImagerySettings
 from pydtmdl.imagery_providers.sentinel2 import Sentinel2L2AImagerySettings
 
@@ -77,20 +82,20 @@ np_data = cv2.resize(np_data, (size, size), interpolation=cv2.INTER_LINEAR)
 roi_preview = cv2.normalize(result.data.filled(0), None, 0, 255, cv2.NORM_MINMAX).astype("uint8")
 
 # Optional: extract Sentinel-2 RGB imagery for the same ROI.
-# imagery_result = ImageryProvider.extract_area(
-#     center=coords,
-#     width_m=4096,
-#     height_m=2048,
-#     rotation_deg=30,
-#     provider_code="sentinel2_l2a",
-#     # user_settings=Sentinel2L2AImagerySettings(
-#     #     date_from="2024-01-01",
-#     #     date_to="2024-12-31",
-#     #     max_cloud_cover=15,
-#     #     max_items=6,
-#     # ),
-# )
-# print(imagery_result.metadata.model_dump())
+imagery_result = ImageryProvider.extract_area(
+    center=coords,
+    width_m=4096,
+    height_m=2048,
+    rotation_deg=30,
+    provider_code="sentinel2_l2a",
+    # user_settings=Sentinel2L2AImagerySettings(
+    #     date_from="2024-01-01",
+    #     date_to="2024-12-31",
+    #     max_cloud_cover=15,
+    #     max_items=6,
+    # ),
+)
+print(imagery_result.metadata.model_dump())
 
 # imagery_preview = imagery_result.data.filled(0)
 # imagery_preview = cv2.cvtColor(imagery_preview.transpose(1, 2, 0), cv2.COLOR_RGB2BGR)
@@ -100,21 +105,31 @@ cv2.imwrite("output.png", np_data)
 cv2.imwrite("output_roi.png", roi_preview)
 # cv2.imwrite("output_satellite.png", imagery_preview)
 
-# Example: extract the same kind of rotated ROI from your own georeferenced raster.
-# local_result = extract_area_from_image(
+# Example: extract a rotated ROI from your own georeferenced imagery raster.
+# local_imagery_result = extract_area_from_imagery(
 #     image_path="my_raster.tif",
 #     center=coords,
 #     width_m=4096,
 #     height_m=2048,
 #     rotation_deg=30,
 # )
-# print(local_result.metadata.model_dump())
-# local_preview = local_result.data
+# print(local_imagery_result.metadata.model_dump())
+# local_preview = local_imagery_result.data
 # if local_preview.ndim == 2:
 #     local_preview = cv2.normalize(local_preview.filled(0), None, 0, 255, cv2.NORM_MINMAX).astype("uint8")
 # else:
 #     local_preview = cv2.cvtColor(local_preview.filled(0).transpose(1, 2, 0), cv2.COLOR_RGB2BGR)
 # cv2.imwrite("output_local_raster.png", local_preview)
+
+# Example: extract a rotated ROI from your own single-band DTM raster.
+# local_dtm_result = extract_area_from_dtm(
+#     image_path="my_dtm.tif",
+#     center=coords,
+#     width_m=4096,
+#     height_m=2048,
+#     rotation_deg=30,
+# )
+# print(local_dtm_result.metadata.model_dump())
 
 # Example: NAIP high-resolution orthophoto for the contiguous United States.
 naip_coords = (40.03, -105.22)
