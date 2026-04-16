@@ -28,3 +28,11 @@ from pydtmdl.base.local_raster import (
     extract_area_from_image,
     extract_area_from_imagery,
 )
+from pydtmdl.postprocess import (
+    PngExportMetadata,
+    PostprocessMetadata,
+    export_single_channel_png,
+    postprocess_dtm,
+    postprocess_dtm_to_png,
+    postprocess_imagery,
+)
