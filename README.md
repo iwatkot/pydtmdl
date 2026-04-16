@@ -23,6 +23,7 @@
 <p align="center">
     <a href="#quick-start">Quick Start</a> •
     <a href="#overview">Overview</a> • 
+    <a href="#postprocessing">Postprocessing</a> •
     <a href="#what-is-a-dtm">What is a DTM?</a> •
     <a href="#supported-dtm-providers">Supported DTM providers</a> •
     <a href="#supported-imagery-providers">Supported Imagery Providers</a> •
@@ -216,6 +217,51 @@ result = extract_area_from_image(
 )
 print(result.metadata.model_dump())
 ```
+
+## Postprocessing
+
+`pydtmdl` provides standalone postprocessing helpers that run outside of the provider
+extraction pipeline. This makes it easy to keep source extraction unchanged while applying
+production-specific normalization and PNG export only where needed.
+
+Available functions:
+
+- `postprocess_dtm(...)`
+- `postprocess_imagery(...)`
+- `export_single_channel_png(...)`
+- `postprocess_dtm_to_png(...)`
+
+Quick DTM example:
+
+```python
+from pydtmdl import postprocess_dtm
+
+processed, metadata = postprocess_dtm(
+    dtm_array,
+    normalize_to_dtype=True,
+    target_dtype="uint16",
+    apply_zero_floor=True,
+    zero_floor_value=35000,
+)
+```
+
+Quick one-step PNG export example (single channel):
+
+```python
+from pydtmdl import postprocess_dtm_to_png
+
+processed, post_meta, png_meta = postprocess_dtm_to_png(
+    dtm_array,
+    "output/dtm.png",
+    normalize_to_dtype=True,
+    target_dtype="uint16",
+    apply_zero_floor=True,
+    zero_floor_value=35000,
+    png_dtype="uint16",
+)
+```
+
+See the full guide in [POSTPROCESSING.md](POSTPROCESSING.md).
 
 ## Licensing and Data Usage
 

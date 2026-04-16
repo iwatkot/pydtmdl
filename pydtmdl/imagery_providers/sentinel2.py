@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import time
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -61,10 +62,24 @@ class Sentinel2L2AImageryProvider(ImageryProvider):
         self._scene_ids: list[str] = []
 
     def download_tiles(self) -> list[str]:
+        started_at = time.perf_counter()
         settings = self.resolved_settings()
         if settings is None:
             raise OutsideCoverageError("Sentinel-2 settings could not be resolved.")
         settings = Sentinel2L2AImagerySettings.model_validate(settings.model_dump())
+
+        self.logger.debug(
+            "Sentinel-2 download started center=%s size=%smx%sm rotation=%.2f date_range=%s..%s cloud<%s search_limit=%s max_items=%s",
+            self.coordinates,
+            self.width_m,
+            self.height_m,
+            self.rotation_deg,
+            settings.date_from,
+            settings.date_to,
+            settings.max_cloud_cover,
+            settings.search_limit,
+            settings.max_items,
+        )
 
         items = self._search_items(settings)
         if not items:
@@ -78,11 +93,18 @@ class Sentinel2L2AImageryProvider(ImageryProvider):
         rendered_scene_ids: list[str] = []
         for item in items:
             output_path = os.path.join(self.shared_tiff_path, f"{item['id']}.tif")
+            scene_cached = os.path.exists(output_path)
             rendered_path = self._render_item(item, settings, output_path)
             if rendered_path is None:
                 continue
             rendered_tiles.append(rendered_path)
             rendered_scene_ids.append(item["id"])
+            self.logger.debug(
+                "Sentinel-2 scene prepared scene_id=%s cache_hit=%s path=%s",
+                item["id"],
+                scene_cached,
+                rendered_path,
+            )
 
         if not rendered_tiles:
             raise OutsideCoverageError(
@@ -92,9 +114,15 @@ class Sentinel2L2AImageryProvider(ImageryProvider):
             )
 
         self._scene_ids = rendered_scene_ids
+        self.logger.debug(
+            "Sentinel-2 download finished rendered=%s elapsed=%.2fs",
+            len(rendered_tiles),
+            time.perf_counter() - started_at,
+        )
         return rendered_tiles
 
     def _search_items(self, settings: Sentinel2L2AImagerySettings) -> list[dict[str, Any]]:
+        started_at = time.perf_counter()
         north, south, east, west = self.get_bbox()
         payload = {
             "collections": [settings.collection],
@@ -107,16 +135,34 @@ class Sentinel2L2AImageryProvider(ImageryProvider):
                 }
             },
         }
+        self.logger.debug(
+            "Sentinel-2 STAC search url=%s bbox=[%.6f, %.6f, %.6f, %.6f] datetime=%s cloud<%s limit=%s",
+            settings.stac_api_url,
+            west,
+            south,
+            east,
+            north,
+            payload["datetime"],
+            settings.max_cloud_cover,
+            settings.search_limit,
+        )
         response = requests.post(settings.stac_api_url, json=payload, timeout=60)
         response.raise_for_status()
         features = response.json().get("features", [])
+        self.logger.debug(
+            "Sentinel-2 STAC search returned=%s elapsed=%.2fs",
+            len(features),
+            time.perf_counter() - started_at,
+        )
         features.sort(
             key=lambda feature: (
                 feature.get("properties", {}).get("eo:cloud_cover", float("inf")),
                 feature.get("properties", {}).get("datetime", ""),
             )
         )
-        return features[: settings.max_items]
+        selected = features[: settings.max_items]
+        self.logger.debug("Sentinel-2 scenes selected=%s", len(selected))
+        return selected
 
     def _render_item(
         self,
@@ -124,12 +170,20 @@ class Sentinel2L2AImageryProvider(ImageryProvider):
         settings: Sentinel2L2AImagerySettings,
         output_path: str,
     ) -> str | None:
+        scene_id = item.get("id", "unknown")
+        started_at = time.perf_counter()
         if os.path.exists(output_path):
+            self.logger.debug("Sentinel-2 scene cache hit scene_id=%s", scene_id)
             return output_path
 
         assets = item.get("assets", {})
         for asset_name in ("red", "green", "blue", "scl"):
             if asset_name not in assets or "href" not in assets[asset_name]:
+                self.logger.debug(
+                    "Sentinel-2 scene missing asset scene_id=%s asset=%s",
+                    scene_id,
+                    asset_name,
+                )
                 return None
 
         red_href = assets["red"]["href"]
@@ -142,11 +196,19 @@ class Sentinel2L2AImageryProvider(ImageryProvider):
             window = from_bounds(*bounds, red_src.transform)
             window = window.round_offsets().round_lengths()
 
+            self.logger.debug(
+                "Sentinel-2 scene read scene_id=%s src_crs=%s window=%s",
+                scene_id,
+                red_src.crs,
+                window,
+            )
+
             red = red_src.read(1, window=window, boundless=True, masked=True)
             transform = red_src.window_transform(window)
             metadata = red_src.meta.copy()
 
         if red.size == 0:
+            self.logger.debug("Sentinel-2 scene produced empty ROI scene_id=%s", scene_id)
             return None
 
         with rasterio.open(green_href) as green_src:
@@ -184,6 +246,7 @@ class Sentinel2L2AImageryProvider(ImageryProvider):
         rgb = np.ma.array(rgb, mask=np.broadcast_to(invalid_mask, rgb.shape))
 
         if rgb.count() == 0:
+            self.logger.debug("Sentinel-2 scene masked out scene_id=%s", scene_id)
             return None
 
         metadata.update(
@@ -200,6 +263,14 @@ class Sentinel2L2AImageryProvider(ImageryProvider):
         )
         with rasterio.open(output_path, "w", **metadata) as dst:
             dst.write(rgb.filled(0))
+
+        self.logger.debug(
+            "Sentinel-2 scene rendered scene_id=%s shape=%sx%s elapsed=%.2fs",
+            scene_id,
+            rgb.shape[1],
+            rgb.shape[2],
+            time.perf_counter() - started_at,
+        )
 
         return output_path
 
