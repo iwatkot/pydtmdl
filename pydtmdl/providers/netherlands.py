@@ -17,7 +17,6 @@ from pydtmdl.base.dtm import DTMProvider
 def _log(logger, level: str, msg: str, *args):
     formatted = msg % args if args else msg
     getattr(logger, level)(formatted)
-    print(f"{level.upper()}: {formatted}")
 
 
 class NetherlandsProvider(DTMProvider):
@@ -328,7 +327,6 @@ class NetherlandsProvider(DTMProvider):
         filled_tiles = [
             self._fill_gaps(p, i + 1, len(raw_tiles)) for i, p in enumerate(raw_tiles)
         ]
-        #self.merge_geotiff(filled_tiles)
 
         _log(self.logger, "debug", "[pipeline] DONE")
 
