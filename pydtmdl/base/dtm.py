@@ -208,7 +208,9 @@ class DTMProvider(ABC):
             raise ValueError("Provider code must be defined.")
         self._cache_key = self.build_cache_key()
         self._provider_directory = os.path.join(directory, self._code)
+        self._source_tile_directory = os.path.join(self._provider_directory, "_tiles")
         self._tile_directory = os.path.join(self._provider_directory, self._cache_key)
+        os.makedirs(self._source_tile_directory, exist_ok=True)
         os.makedirs(self._tile_directory, exist_ok=True)
         self._result_tiff_path = os.path.join(self._tile_directory, "result.tif")
         self._metadata_path = os.path.join(self._tile_directory, "result_metadata.json")
@@ -752,7 +754,7 @@ class DTMProvider(ABC):
                 provider_code=self.code(),
                 provider_name=self.name(),
             )
-        if np.ma.isMaskedArray(data) and data.count() == 0:
+        if np.ma.isMaskedArray(data) and cast(np.ma.MaskedArray[Any, Any], data).count() == 0:
             raise OutsideCoverageError(
                 "No data in the tile. Try different provider.",
                 provider_code=self.code(),

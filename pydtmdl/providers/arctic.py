@@ -35,7 +35,7 @@ class ArcticProvider(DTMProvider):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.shared_tiff_path = os.path.join(self._tile_directory, "shared")
+        self.shared_tiff_path = os.path.join(self._source_tile_directory, "shared")
         os.makedirs(self.shared_tiff_path, exist_ok=True)
 
     def get_download_urls(self) -> list[str]:

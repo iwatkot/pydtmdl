@@ -21,7 +21,7 @@ class ThuringiaProvider(DTMProvider):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.tiff_path = os.path.join(self._tile_directory, "tiffs")
+        self.tiff_path = os.path.join(self._source_tile_directory, "tiffs")
         os.makedirs(self.tiff_path, exist_ok=True)
 
     def download_tiles(self) -> list[str]:

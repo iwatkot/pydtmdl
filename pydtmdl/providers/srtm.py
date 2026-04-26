@@ -21,8 +21,8 @@ class SRTM30Provider(DTMProvider):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.hgt_directory = os.path.join(self._tile_directory, "hgt")
-        self.gz_directory = os.path.join(self._tile_directory, "gz")
+        self.hgt_directory = os.path.join(self._source_tile_directory, "hgt")
+        self.gz_directory = os.path.join(self._source_tile_directory, "gz")
         os.makedirs(self.hgt_directory, exist_ok=True)
         os.makedirs(self.gz_directory, exist_ok=True)
 
