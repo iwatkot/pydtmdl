@@ -22,6 +22,7 @@ class AustriaProvider(DTMProvider):
 
     _dataset_date = "20250915"
     _dataset_year = "2025"
+    _source_crs = "EPSG:3035"
 
     _code = "austria"
     _name = f"Austria BEV ALS DTM 1 m ({_dataset_year})"
@@ -129,7 +130,7 @@ class AustriaProvider(DTMProvider):
         os.makedirs(self.shared_tiff_path, exist_ok=True)
 
         self._transformer = Transformer.from_crs(
-            "EPSG:4326", "EPSG:3035", always_xy=True
+            "EPSG:4326", self._source_crs, always_xy=True
         )
 
     def _get_projected_bbox(self) -> tuple[float, float, float, float]:
@@ -292,7 +293,7 @@ class AustriaProvider(DTMProvider):
             snapped_bounds = window_bounds(window, src.transform)
 
             file_name = (
-                f"ALS_DTM_{self._dataset_date}_N{northing}E{easting}_"
+                f"ALS_DTM_{self._dataset_date}_EPSG3035_N{northing}E{easting}_"
                 f"{self._format_bound(snapped_bounds[0])}_"
                 f"{self._format_bound(snapped_bounds[1])}_"
                 f"{self._format_bound(snapped_bounds[2])}_"
@@ -309,7 +310,7 @@ class AustriaProvider(DTMProvider):
                 "height": data.shape[0],
                 "count": 1,
                 "dtype": data.dtype,
-                "crs": src.crs,
+                "crs": self._source_crs,
                 "transform": transform,
                 "compress": "deflate",
             }
@@ -335,7 +336,7 @@ class AustriaProvider(DTMProvider):
         left, bottom, right, top = self._get_projected_bbox()
 
         file_name = (
-            f"ALS_DTM_{self._dataset_date}_"
+            f"ALS_DTM_{self._dataset_date}_EPSG3035_"
             f"{self._format_bound(left)}_"
             f"{self._format_bound(bottom)}_"
             f"{self._format_bound(right)}_"
@@ -376,6 +377,7 @@ class AustriaProvider(DTMProvider):
                     "width": mosaic.shape[2],
                     "transform": out_transform,
                     "count": mosaic.shape[0],
+                    "crs": self._source_crs,
                     "compress": "deflate",
                 }
             )
