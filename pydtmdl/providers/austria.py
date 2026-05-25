@@ -26,7 +26,7 @@ class AustriaProvider(DTMProvider):
     _code = "austria"
     _name = f"Austria BEV ALS DTM 1 m ({_dataset_year})"
     _region = "AT"
-    _icon = ""
+    _icon = "🇦🇹"
     _resolution = 1.0
 
     _url = (
