@@ -86,6 +86,31 @@ def _write_scl_raster(path: Path) -> Path:
     return path
 
 
+def _write_single_band_raster(
+    path: Path,
+    *,
+    crs: str,
+    bounds: tuple[float, float, float, float],
+    value: int,
+) -> Path:
+    data = np.full((40, 40), value, dtype=np.uint8)
+    transform = from_bounds(*bounds, 40, 40)
+    with rasterio.open(
+        path,
+        "w",
+        driver="GTiff",
+        height=40,
+        width=40,
+        count=1,
+        dtype=data.dtype,
+        crs=crs,
+        transform=transform,
+        nodata=0,
+    ) as dataset:
+        dataset.write(data, 1)
+    return path
+
+
 def _make_static_imagery_provider(source_path: Path, code: str):
     calls = {"download": 0}
 
@@ -225,3 +250,36 @@ def test_naip_provider_renders_local_rgb_asset(tmp_path: Path, monkeypatch):
     assert result.metadata.dtype == "uint8"
     assert result.data.shape[0] == 3
     assert np.ma.isMaskedArray(result.data)
+
+
+def test_merge_geotiff_reprojects_mixed_crs_inputs(tmp_path: Path):
+    tile_32630 = _write_single_band_raster(
+        tmp_path / "tile_32630.tif",
+        crs="EPSG:32630",
+        bounds=(500000.0, 5650000.0, 500120.0, 5650120.0),
+        value=50,
+    )
+    tile_32631 = _write_single_band_raster(
+        tmp_path / "tile_32631.tif",
+        crs="EPSG:32631",
+        bounds=(300000.0, 5650000.0, 300120.0, 5650120.0),
+        value=100,
+    )
+
+    provider_code = _next_imagery_code("merge")
+    provider_class, _ = _make_static_imagery_provider(tile_32630, provider_code)
+    provider = provider_class(
+        coordinates=(51.14667, 1.34241),
+        width_m=100,
+        height_m=100,
+        directory=str(tmp_path),
+    )
+
+    merged_path, merged_crs = provider.merge_geotiff([str(tile_32630), str(tile_32631)])
+
+    assert Path(merged_path).exists()
+    with rasterio.open(merged_path) as dataset:
+        assert dataset.crs is not None
+        assert dataset.count == 1
+        assert str(dataset.crs) == str(merged_crs)
+        assert dataset.read(1).max() > 0

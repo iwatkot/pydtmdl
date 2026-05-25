@@ -11,6 +11,7 @@ import math
 import os
 import time
 from abc import ABC, abstractmethod
+from contextlib import ExitStack
 from dataclasses import dataclass
 from typing import Any, Type, cast
 from zipfile import ZipFile
@@ -24,6 +25,7 @@ from pyproj import CRS, Transformer
 from rasterio.enums import Resampling
 from rasterio.mask import mask
 from rasterio.merge import merge
+from rasterio.vrt import WarpedVRT
 from rasterio.warp import calculate_default_transform, reproject
 from rasterio.windows import from_bounds
 from requests.exceptions import RequestException
@@ -1187,29 +1189,47 @@ class DTMProvider(ABC):
             input_files (list): List of input GeoTIFF files to merge.
         """
         output_file = os.path.join(self._tile_directory, "merged.tif")
-        # Open all input GeoTIFF files as datasets
         self.logger.debug("Merging tiff files...")
-        datasets = [rasterio.open(file) for file in input_files]
+        with ExitStack() as stack:
+            datasets = [stack.enter_context(rasterio.open(file)) for file in input_files]
+            crs = datasets[0].crs
+            merged_sources = []
+            has_mixed_crs = False
 
-        # Merge datasets
-        crs = datasets[0].crs
-        mosaic, out_transform = merge(datasets, nodata=0)
+            for dataset in datasets:
+                if dataset.crs != crs:
+                    has_mixed_crs = True
+                    merged_sources.append(
+                        stack.enter_context(
+                            WarpedVRT(
+                                dataset,
+                                crs=crs,
+                                resampling=Resampling.nearest,
+                            )
+                        )
+                    )
+                    continue
+                merged_sources.append(dataset)
 
-        # Get metadata from the first file and update it for the output
-        out_meta = datasets[0].meta.copy()
-        out_meta.update(
-            {
-                "driver": "GTiff",
-                "height": mosaic.shape[1],
-                "width": mosaic.shape[2],
-                "transform": out_transform,
-                "count": mosaic.shape[0],  # Number of bands
-            }
-        )
+            if has_mixed_crs:
+                self.logger.debug("Merge inputs have mixed CRS. Reprojecting to %s", crs)
 
-        # Write merged GeoTIFF to the output file
-        with rasterio.open(output_file, "w", **out_meta) as dest:
-            dest.write(mosaic)
+            mosaic, out_transform = merge(merged_sources, nodata=0)
+
+            out_meta = datasets[0].meta.copy()
+            out_meta.update(
+                {
+                    "driver": "GTiff",
+                    "height": mosaic.shape[1],
+                    "width": mosaic.shape[2],
+                    "transform": out_transform,
+                    "count": mosaic.shape[0],
+                    "crs": crs,
+                }
+            )
+
+            with rasterio.open(output_file, "w", **out_meta) as dest:
+                dest.write(mosaic)
 
         self.logger.debug("GeoTIFF images merged successfully into %s", output_file)
         return output_file, crs
