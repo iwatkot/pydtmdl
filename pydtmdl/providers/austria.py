@@ -18,16 +18,19 @@ from pydtmdl.base.dtm import DTMProvider
 
 
 class AustriaProvider(DTMProvider):
-    """Provider of Austria BEV ALS DTM 1 m data (Stichtag 15.09.2024)."""
+    """Provider of Austria BEV ALS DTM 1 m data (Stichtag 15.09.2025)."""
+
+    _dataset_date = "20250915"
+    _dataset_year = "2025"
 
     _code = "austria"
-    _name = "Austria BEV ALS DTM 1 m (2024)"
+    _name = f"Austria BEV ALS DTM 1 m ({_dataset_year})"
     _region = "AT"
-    _icon = "🇦🇹"
+    _icon = ""
     _resolution = 1.0
 
     _url = (
-        "https://data.bev.gv.at/download/ALS/DTM/20240915/"
+        f"https://data.bev.gv.at/download/ALS/DTM/{_dataset_date}/"
         "ALS_DTM_CRS3035RES50000mN{northing}E{easting}.tif"
     )
 
@@ -41,7 +44,11 @@ class AustriaProvider(DTMProvider):
         (49.147828, 45.95086, 17.777012, 9.051669),
     ]
 
-    # Official 2024 BEV tile coverage: 55 tiles total.
+    # BEV tile coverage.
+    #
+    # This assumes that the 2025 dataset uses the same 50 km tile layout as the
+    # 2024 dataset: 55 tiles total.
+    #
     # Dictionary structure:
     #   key   = northing of the 50 km tile row in EPSG:3035
     #   value = tuple of eastings available in that row
@@ -144,7 +151,7 @@ class AustriaProvider(DTMProvider):
     def _iter_required_tiles(
         self, left: float, bottom: float, right: float, top: float
     ) -> Iterator[tuple[int, int]]:
-        """Yield all official BEV tiles intersecting the requested projected bbox."""
+        """Yield all BEV tiles intersecting the requested projected bbox."""
         min_easting = math.floor(left / self._tile_size) * self._tile_size
         max_easting = math.floor((right - 1e-9) / self._tile_size) * self._tile_size
         min_northing = math.floor(bottom / self._tile_size) * self._tile_size
@@ -285,7 +292,7 @@ class AustriaProvider(DTMProvider):
             snapped_bounds = window_bounds(window, src.transform)
 
             file_name = (
-                f"ALS_DTM_20240915_N{northing}E{easting}_"
+                f"ALS_DTM_{self._dataset_date}_N{northing}E{easting}_"
                 f"{self._format_bound(snapped_bounds[0])}_"
                 f"{self._format_bound(snapped_bounds[1])}_"
                 f"{self._format_bound(snapped_bounds[2])}_"
@@ -328,7 +335,7 @@ class AustriaProvider(DTMProvider):
         left, bottom, right, top = self._get_projected_bbox()
 
         file_name = (
-            "ALS_DTM_20240915_"
+            f"ALS_DTM_{self._dataset_date}_"
             f"{self._format_bound(left)}_"
             f"{self._format_bound(bottom)}_"
             f"{self._format_bound(right)}_"
