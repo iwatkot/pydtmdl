@@ -154,15 +154,93 @@ class Sentinel2L2AImageryProvider(ImageryProvider):
             len(features),
             time.perf_counter() - started_at,
         )
-        features.sort(
-            key=lambda feature: (
-                feature.get("properties", {}).get("eo:cloud_cover", float("inf")),
-                feature.get("properties", {}).get("datetime", ""),
-            )
-        )
-        selected = features[: settings.max_items]
+        selected = self._select_items(features, settings)
         self.logger.debug("Sentinel-2 scenes selected=%s", len(selected))
         return selected
+
+    def _select_items(
+        self,
+        features: list[dict[str, Any]],
+        settings: Sentinel2L2AImagerySettings,
+    ) -> list[dict[str, Any]]:
+        """Choose scenes that preserve ROI coverage before filling extras by quality."""
+        ranked = sorted(features, key=self._feature_sort_key)
+        if settings.max_items <= 0:
+            return []
+
+        grouped_by_tile: dict[str, list[dict[str, Any]]] = {}
+        for feature in ranked:
+            grouped_by_tile.setdefault(self._feature_tile_code(feature), []).append(feature)
+
+        selected: list[dict[str, Any]] = []
+        selected_ids: set[str] = set()
+
+        tile_representatives = [tile_features[0] for tile_features in grouped_by_tile.values()]
+        tile_representatives.sort(
+            key=lambda feature: (-self._feature_overlap_area(feature), *self._feature_sort_key(feature))
+        )
+
+        for feature in tile_representatives:
+            if len(selected) >= settings.max_items:
+                break
+            scene_id = str(feature.get("id", ""))
+            selected.append(feature)
+            selected_ids.add(scene_id)
+
+        remaining = [feature for feature in ranked if str(feature.get("id", "")) not in selected_ids]
+        remaining.sort(
+            key=lambda feature: (-self._feature_overlap_area(feature), *self._feature_sort_key(feature))
+        )
+        selected.extend(remaining[: max(0, settings.max_items - len(selected))])
+        return selected
+
+    @staticmethod
+    def _feature_tile_code(feature: dict[str, Any]) -> str:
+        """Extract a stable tile identifier for grouping overlapping Sentinel scenes."""
+        properties = feature.get("properties", {})
+        for key in ("s2:mgrs_tile", "mgrs:tile", "grid:code"):
+            value = properties.get(key)
+            if value:
+                return str(value)
+
+        feature_id = str(feature.get("id", ""))
+        parts = feature_id.split("_")
+        if len(parts) > 1 and parts[1]:
+            return parts[1]
+        return feature_id
+
+    def _feature_overlap_area(self, feature: dict[str, Any]) -> float:
+        """Estimate how much of the request bbox a STAC item can cover."""
+        bbox = feature.get("bbox")
+        if not isinstance(bbox, list) or len(bbox) < 4:
+            return 0.0
+
+        north, south, east, west = self.get_bbox()
+        overlap_west = max(west, float(bbox[0]))
+        overlap_south = max(south, float(bbox[1]))
+        overlap_east = min(east, float(bbox[2]))
+        overlap_north = min(north, float(bbox[3]))
+        if overlap_west >= overlap_east or overlap_south >= overlap_north:
+            return 0.0
+        return (overlap_east - overlap_west) * (overlap_north - overlap_south)
+
+    @staticmethod
+    def _feature_sort_key(feature: dict[str, Any]) -> tuple[float, float, str]:
+        """Sort by cloud cover first and prefer newer acquisitions as a tiebreaker."""
+        properties = feature.get("properties", {})
+        cloud_cover = float(properties.get("eo:cloud_cover", float("inf")))
+        timestamp = Sentinel2L2AImageryProvider._feature_timestamp(properties.get("datetime"))
+        return (cloud_cover, -timestamp, str(feature.get("id", "")))
+
+    @staticmethod
+    def _feature_timestamp(value: Any) -> float:
+        """Return a numeric timestamp for ISO datetimes used in STAC responses."""
+        if not value:
+            return 0.0
+        try:
+            return datetime.fromisoformat(str(value).replace("Z", "+00:00")).timestamp()
+        except ValueError:
+            return 0.0
 
     def _render_item(
         self,

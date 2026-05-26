@@ -269,6 +269,48 @@ def test_sentinel_provider_renders_local_assets_with_cloud_mask(tmp_path: Path, 
     assert np.ma.getmaskarray(result.data).any()
 
 
+def test_sentinel_selection_prioritizes_roi_coverage_across_tiles(tmp_path: Path):
+    provider = Sentinel2L2AImageryProvider(
+        (45.1765, 20.0078),
+        size=8192,
+        width_m=8192,
+        height_m=8192,
+        directory=str(tmp_path),
+    )
+    north, south, east, west = provider.get_bbox()
+    narrow_east = west + ((east - west) * 0.15)
+    settings = Sentinel2L2AImagerySettings(max_items=2)
+    features = [
+        {
+            "id": "S2A_34TDQ_20260501_0_L2A",
+            "bbox": [west, south, narrow_east, north],
+            "properties": {"eo:cloud_cover": 0.01, "datetime": "2026-05-01T09:00:00Z"},
+        },
+        {
+            "id": "S2B_34TDQ_20260502_0_L2A",
+            "bbox": [west, south, narrow_east, north],
+            "properties": {"eo:cloud_cover": 0.02, "datetime": "2026-05-02T09:00:00Z"},
+        },
+        {
+            "id": "S2C_34TDR_20260503_0_L2A",
+            "bbox": [west, south, east, north],
+            "properties": {"eo:cloud_cover": 0.10, "datetime": "2026-05-03T09:00:00Z"},
+        },
+        {
+            "id": "S2D_34TDR_20260504_0_L2A",
+            "bbox": [west, south, east, north],
+            "properties": {"eo:cloud_cover": 0.11, "datetime": "2026-05-04T09:00:00Z"},
+        },
+    ]
+
+    selected = provider._select_items(features, settings)
+
+    assert [item["id"] for item in selected] == [
+        "S2C_34TDR_20260503_0_L2A",
+        "S2A_34TDQ_20260501_0_L2A",
+    ]
+
+
 def test_naip_provider_renders_local_rgb_asset(tmp_path: Path, monkeypatch):
     naip_path = tmp_path / "naip.tif"
     _write_rgbir_raster(naip_path)
