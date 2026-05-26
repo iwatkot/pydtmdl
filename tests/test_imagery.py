@@ -1,15 +1,29 @@
 from __future__ import annotations
 
+from io import BytesIO
 from itertools import count
 from pathlib import Path
 
 import numpy as np
 import pytest
 import rasterio
+from PIL import Image
+from pyproj import Transformer
+from rasterio.io import MemoryFile
 from rasterio.transform import from_bounds
 
 from pydtmdl import DTMProvider, ImageryProvider
 from pydtmdl.base.dtm import CropExtractionError
+from pydtmdl.base.imagery_wms import WMSImageryProvider
+from pydtmdl.base.imagery_wmts import WMTSImageryProvider
+from pydtmdl.imagery_providers.austria import AustriaBasemapOrthophotoImageryProvider
+from pydtmdl.imagery_providers.europe import (
+    CopernicusVHR2021ImageryProvider,
+    FranceBDOrthoImageryProvider,
+    LuxembourgOrthophotoImageryProvider,
+    NetherlandsPDOKImageryProvider,
+    SpainPNOAImageryProvider,
+)
 from pydtmdl.imagery_providers.germany import (
     BavariaImageryProvider,
     HessenImageryProvider,
@@ -103,6 +117,13 @@ def _write_rgbir_raster(path: Path) -> Path:
     ) as dataset:
         dataset.write(data)
     return path
+
+
+def _make_rgb_jpeg_bytes() -> bytes:
+    image = Image.new("RGB", (32, 24), color=(120, 90, 60))
+    output = BytesIO()
+    image.save(output, format="JPEG")
+    return output.getvalue()
 
 
 def _write_scl_raster(path: Path) -> Path:
@@ -199,6 +220,144 @@ def test_imagery_provider_extract_area_returns_rgb_result(tmp_path: Path):
     assert result.metadata.dataset == "test-imagery"
     assert result.data.shape[0] == 3
     assert result.data.dtype == np.uint16
+
+
+def test_wms_imagery_provider_georeferences_jpeg_bytes(tmp_path: Path):
+    class TestJPEGWMSImageryProvider(WMSImageryProvider):
+        _code = _next_imagery_code("jpeg_wms")
+        _name = "JPEG WMS"
+        _region = "Test"
+        _icon = "I"
+        _resolution = 0.5
+        _dataset = "test-jpeg-wms"
+        _extents = [(1.0, -1.0, 1.0, -1.0)]
+        _url = "https://example.invalid/wms"
+        _source_crs = "EPSG:3857"
+        _image_format = "image/jpeg"
+
+        def get_wms_parameters(self, tile: tuple[float, float, float, float]) -> dict:
+            return {}
+
+    provider = TestJPEGWMSImageryProvider(
+        coordinates=(0.0, 0.0),
+        width_m=1000,
+        height_m=1000,
+        directory=str(tmp_path),
+    )
+    tile = (10.0, 20.0, 30.0, 40.0)
+
+    wrapped = provider._georeference_wms_image(_make_rgb_jpeg_bytes(), tile)
+
+    with MemoryFile(wrapped) as memory_file:
+        with memory_file.open() as dataset:
+            assert dataset.driver == "GTiff"
+            assert str(dataset.crs) == provider._source_crs
+            assert dataset.count == 3
+            assert dataset.bounds.left == pytest.approx(tile[1])
+            assert dataset.bounds.bottom == pytest.approx(tile[0])
+            assert dataset.bounds.right == pytest.approx(tile[3])
+            assert dataset.bounds.top == pytest.approx(tile[2])
+
+
+def test_european_imagery_providers_are_registered():
+    expected = {
+        "austria_basemap_orthofoto": AustriaBasemapOrthophotoImageryProvider,
+        "france_bdortho": FranceBDOrthoImageryProvider,
+        "spain_pnoa": SpainPNOAImageryProvider,
+        "netherlands_luchtfoto_hr": NetherlandsPDOKImageryProvider,
+        "luxembourg_orthophoto": LuxembourgOrthophotoImageryProvider,
+        "copernicus_vhr_2021": CopernicusVHR2021ImageryProvider,
+    }
+
+    for code, provider_class in expected.items():
+        assert ImageryProvider.get_provider_by_code(code) is provider_class
+
+
+def test_wms_imagery_provider_transforms_projected_bbox_in_xy_order(tmp_path: Path):
+    provider = NetherlandsPDOKImageryProvider(
+        coordinates=(52.3676, 4.9041),
+        width_m=512,
+        height_m=512,
+        directory=str(tmp_path),
+    )
+
+    bbox = provider._transform_bbox_to_source_crs(provider.get_bbox())
+
+    transformer = Transformer.from_crs("EPSG:4326", provider._source_crs, always_xy=True)
+    x, y = transformer.transform(4.9041, 52.3676)
+
+    assert bbox[3] < x < bbox[2]
+    assert bbox[0] < y < bbox[1]
+
+    tile = (bbox[3], bbox[0], bbox[2], bbox[1])
+    assert provider.get_wms_parameters(tile)["bbox"] == tile
+
+
+def test_european_wms_provider_georeferences_jpeg_bytes_in_xy_order(tmp_path: Path):
+    provider = NetherlandsPDOKImageryProvider(
+        coordinates=(52.3676, 4.9041),
+        width_m=512,
+        height_m=512,
+        directory=str(tmp_path),
+    )
+    tile = (121840.0, 486488.0, 122352.0, 487000.0)
+
+    wrapped = provider._georeference_wms_image(_make_rgb_jpeg_bytes(), tile)
+
+    with MemoryFile(wrapped) as memory_file:
+        with memory_file.open() as dataset:
+            assert dataset.bounds.left == pytest.approx(tile[0])
+            assert dataset.bounds.bottom == pytest.approx(tile[1])
+            assert dataset.bounds.right == pytest.approx(tile[2])
+            assert dataset.bounds.top == pytest.approx(tile[3])
+
+
+def test_wmts_imagery_provider_georeferences_tile_bounds(tmp_path: Path):
+    class TestWMTSImageryProvider(WMTSImageryProvider):
+        _code = _next_imagery_code("wmts")
+        _name = "WMTS"
+        _region = "Test"
+        _icon = "I"
+        _resolution = 1.0
+        _dataset = "test-wmts"
+        _extents = [(1.0, -1.0, 1.0, -1.0)]
+
+        def get_tile_url(self, tile_matrix: int, tile_row: int, tile_col: int) -> str:
+            return "https://example.invalid/tile.jpeg"
+
+    provider = TestWMTSImageryProvider(
+        coordinates=(0.0, 0.0),
+        width_m=512,
+        height_m=512,
+        directory=str(tmp_path),
+    )
+
+    wrapped = provider._georeference_tile(_make_rgb_jpeg_bytes(), 10.0, 20.0, 30.0, 40.0)
+
+    with MemoryFile(wrapped) as memory_file:
+        with memory_file.open() as dataset:
+            assert str(dataset.crs) == provider._source_crs
+            assert dataset.bounds.left == pytest.approx(10.0)
+            assert dataset.bounds.bottom == pytest.approx(20.0)
+            assert dataset.bounds.right == pytest.approx(30.0)
+            assert dataset.bounds.top == pytest.approx(40.0)
+
+
+def test_austria_wmts_tile_selection_contains_vienna(tmp_path: Path):
+    provider = AustriaBasemapOrthophotoImageryProvider(
+        coordinates=(48.2082, 16.3738),
+        width_m=512,
+        height_m=512,
+        directory=str(tmp_path),
+    )
+
+    left, bottom, right, top = provider._get_projected_bbox()
+    tiles = provider._iter_required_tiles(left, bottom, right, top)
+    transformer = Transformer.from_crs("EPSG:4326", provider._source_crs, always_xy=True)
+    x, y = transformer.transform(16.3738, 48.2082)
+
+    assert tiles
+    assert any(tile[3] <= x <= tile[5] and tile[4] <= y <= tile[6] for tile in tiles)
 
 
 def test_imagery_provider_rejects_partial_valid_coverage(tmp_path: Path):

@@ -6,6 +6,9 @@ from typing import Any
 
 import rasterio
 from owslib.wms import WebMapService
+from pyproj import Transformer
+from rasterio.io import MemoryFile
+from rasterio.transform import from_bounds
 
 from pydtmdl import utils
 from pydtmdl.base.imagery import ImageryProvider
@@ -18,6 +21,8 @@ class WMSImageryProvider(ImageryProvider):
     _source_crs: str = "EPSG:25832"
     _tile_size: float = 1000
     _tile_pixels: int = 3000
+    _image_format: str = "image/tiff"
+    _shared_tile_subdirectory = "shared"
 
     @abstractmethod
     def get_wms_parameters(self, tile: tuple[float, float, float, float]) -> dict:
@@ -25,21 +30,82 @@ class WMSImageryProvider(ImageryProvider):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.shared_tiff_path = os.path.join(self._source_tile_directory, "shared")
+        self.shared_tiff_path = os.path.join(
+            self._source_tile_directory,
+            self._shared_tile_subdirectory,
+        )
         os.makedirs(self.shared_tiff_path, exist_ok=True)
 
     def download_tiles(self) -> list[str]:
-        bbox = utils.transform_bbox(self.get_bbox(), self._source_crs)
+        bbox = self._transform_bbox_to_source_crs(self.get_bbox())
         tiles = utils.tile_bbox(bbox, self._tile_size)
         wms = WebMapService(self._url, version=self._wms_version, timeout=600)
 
         def wms_fetcher(tile: tuple[float, float, float, float]) -> Any:
-            return wms.getmap(**self.get_wms_parameters(tile))
+            response = wms.getmap(**self.get_wms_parameters(tile))
+            image_bytes = response.read()
+            if self._requires_georeferencing():
+                return self._georeference_wms_image(image_bytes, tile)
+            return image_bytes
 
         files = self.download_tiles_with_fetcher(tiles, self.shared_tiff_path, wms_fetcher)
         for file_path in files:
             self._ensure_tile_crs(file_path)
         return files
+
+    def _transform_bbox_to_source_crs(
+        self,
+        bbox: tuple[float, float, float, float],
+    ) -> tuple[float, float, float, float]:
+        """Transform a WGS84 bbox to the source CRS using x/y output ordering."""
+        north, south, east, west = bbox
+        transformer = Transformer.from_crs("EPSG:4326", self._source_crs, always_xy=True)
+        corners = [
+            transformer.transform(west, south),
+            transformer.transform(west, north),
+            transformer.transform(east, north),
+            transformer.transform(east, south),
+        ]
+        xs = [corner[0] for corner in corners]
+        ys = [corner[1] for corner in corners]
+        return max(ys), min(ys), max(xs), min(xs)
+
+    def _requires_georeferencing(self) -> bool:
+        image_format = self._image_format.lower()
+        return image_format in {"image/jpeg", "image/png", "image/png8", "image/png32"}
+
+    def _georeference_wms_image(
+        self,
+        image_bytes: bytes,
+        tile: tuple[float, float, float, float],
+    ) -> bytes:
+        with MemoryFile(image_bytes) as input_memory:
+            with input_memory.open() as source:
+                data = source.read()
+                transform = from_bounds(
+                    west=tile[1],
+                    south=tile[0],
+                    east=tile[3],
+                    north=tile[2],
+                    width=source.width,
+                    height=source.height,
+                )
+                profile = {
+                    "driver": "GTiff",
+                    "crs": self._source_crs,
+                    "dtype": source.dtypes[0],
+                    "transform": transform,
+                    "count": source.count,
+                    "width": source.width,
+                    "height": source.height,
+                }
+                if source.nodata is not None:
+                    profile["nodata"] = source.nodata
+
+        with MemoryFile() as output_memory:
+            with output_memory.open(**profile) as destination:
+                destination.write(data)
+            return output_memory.read()
 
     def _ensure_tile_crs(self, file_path: str) -> None:
         """Assign the requested source CRS when a WMS GeoTIFF omits EPSG metadata."""

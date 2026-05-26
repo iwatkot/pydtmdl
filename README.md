@@ -173,11 +173,17 @@ structured metadata, and local caching.
 | --------------------------- | --------------------------- | ---------- | ----- |
 | Sentinel-2 L2A RGB          | Global land coverage        | 10 meters  | Free global fallback built from public STAC + COG assets |
 | NAIP RGB                    | Contiguous United States    | 0.3-0.6 m  | High-resolution USDA orthophotos, public domain |
+| Austria basemap.at orthophoto | Austria                   | 1 m        | Official basemap.at WMTS orthophoto |
 | North Rhine-Westphalia DOP RGB | North Rhine-Westphalia, Germany | 0.1 m | State orthophoto WMS |
 | Bavaria DOP20 RGB           | Bavaria, Germany            | 0.2 m      | State orthophoto WMS |
 | Hessen DOP20 RGB            | Hessen, Germany             | 0.2 m      | State orthophoto WMS |
 | Lower Saxony DOP20 RGB      | Lower Saxony, Germany       | 0.2 m      | State orthophoto WMS |
 | Thuringia DOP20 RGB         | Thuringia, Germany          | 0.2 m      | State orthophoto WMS |
+| France IGN BD ORTHO         | Mainland France             | 0.2 m      | Official IGN orthophoto WMS |
+| Spain PNOA maximum actuality | Mainland Spain             | 0.25 m     | Official IGN orthophoto WMS |
+| Netherlands PDOK Luchtfoto HR | Netherlands               | 0.08 m     | Official PDOK WMS, JPEG tiles wrapped to GeoTIFF |
+| Luxembourg orthophoto       | Luxembourg                  | 0.1 m      | Official Geoportail WMS, JPEG tiles wrapped to GeoTIFF |
+| Copernicus VHR 2021         | Europe                      | 2 m        | Pan-European Copernicus fallback mosaic |
 | Poland high-resolution orthophoto | Poland               | 0.25 m metadata / locally higher in places | Official Geoportal/GUGiK WMS; may be blocked outside Poland |
 
 Note: the Poland orthophoto provider is included for users who can reach the official Polish
