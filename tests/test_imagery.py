@@ -10,6 +10,13 @@ from rasterio.transform import from_bounds
 
 from pydtmdl import DTMProvider, ImageryProvider
 from pydtmdl.base.dtm import CropExtractionError
+from pydtmdl.imagery_providers.germany import (
+    BavariaImageryProvider,
+    HessenImageryProvider,
+    NiedersachsenImageryProvider,
+    NRWImageryProvider,
+    ThuringiaImageryProvider,
+)
 from pydtmdl.imagery_providers.naip import NAIPImageryProvider, NAIPImagerySettings
 from pydtmdl.imagery_providers.sentinel2 import (
     Sentinel2L2AImageryProvider,
@@ -334,3 +341,44 @@ def test_merge_geotiff_reprojects_mixed_crs_inputs(tmp_path: Path):
         assert dataset.count == 1
         assert str(dataset.crs) == str(merged_crs)
         assert dataset.read(1).max() > 0
+
+
+def test_german_imagery_providers_are_available_by_region():
+    cases = [
+        ((51.46, 7.01), NRWImageryProvider.code()),
+        ((48.14, 11.58), BavariaImageryProvider.code()),
+        ((50.11, 8.68), HessenImageryProvider.code()),
+        ((52.37, 9.73), NiedersachsenImageryProvider.code()),
+        ((50.98, 11.03), ThuringiaImageryProvider.code()),
+    ]
+
+    for center, provider_code in cases:
+        providers = {provider.code() for provider in ImageryProvider.get_list(center)}
+
+        assert provider_code in providers
+
+
+def test_german_imagery_providers_build_expected_wms_parameters(tmp_path: Path):
+    cases = [
+        (NRWImageryProvider, "nw_dop_rgb"),
+        (BavariaImageryProvider, "by_dop20c"),
+        (HessenImageryProvider, "he_dop20_rgb"),
+        (NiedersachsenImageryProvider, "ni_dop20"),
+        (ThuringiaImageryProvider, "th_dop"),
+    ]
+
+    for provider_class, layer in cases:
+        provider = provider_class(
+            coordinates=(51.0, 8.0),
+            width_m=512,
+            height_m=512,
+            directory=str(tmp_path),
+        )
+
+        params = provider.get_wms_parameters((100.0, 200.0, 300.0, 400.0))
+
+        assert params["layers"] == [layer]
+        assert params["srs"] == "EPSG:25832"
+        assert params["bbox"] == (200.0, 100.0, 400.0, 300.0)
+        assert params["size"] == (3000, 3000)
+        assert params["format"] == "image/tiff"

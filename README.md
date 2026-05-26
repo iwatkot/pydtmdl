@@ -1,22 +1,4 @@
 <div align="center" markdown>
-
-[![Maps4FS](https://img.shields.io/badge/maps4fs-gray?style=for-the-badge)](https://github.com/iwatkot/maps4fs)
-[![Maps4FS](https://img.shields.io/badge/atlasfs-green?style=for-the-badge)](https://github.com/iwatkot/atlasfs)
-[![Maps4FS](https://img.shields.io/badge/maps4fs-windows-purple?style=for-the-badge)](https://github.com/iwatkot/maps4fswindows)
-[![PYDTMDL](https://img.shields.io/badge/pydtmdl-blue?style=for-the-badge)](https://github.com/iwatkot/pydtmdl)
-[![PYGDMDL](https://img.shields.io/badge/pygmdl-teal?style=for-the-badge)](https://github.com/iwatkot/pygmdl)  
-[![Maps4FS API](https://img.shields.io/badge/maps4fs-api-green?style=for-the-badge)](https://github.com/iwatkot/maps4fsapi)
-[![Maps4FS UI](https://img.shields.io/badge/maps4fs-ui-blue?style=for-the-badge)](https://github.com/iwatkot/maps4fsui)
-[![Maps4FS Data](https://img.shields.io/badge/maps4fs-data-orange?style=for-the-badge)](https://github.com/iwatkot/maps4fsdata)
-[![Maps4FS ChromaDocs](https://img.shields.io/badge/maps4fs-chromadocs-orange?style=for-the-badge)](https://github.com/iwatkot/maps4fschromadocs)  
-[![Maps4FS Upgrader](https://img.shields.io/badge/maps4fs-upgrader-yellow?style=for-the-badge)](https://github.com/iwatkot/maps4fsupgrader)
-[![Maps4FS Stats](https://img.shields.io/badge/maps4fs-stats-red?style=for-the-badge)](https://github.com/iwatkot/maps4fsstats)
-[![Maps4FS Bot](https://img.shields.io/badge/maps4fs-bot-teal?style=for-the-badge)](https://github.com/iwatkot/maps4fsbot)
-[![Maps4FS Locale](https://img.shields.io/badge/maps4fs-locale-purple?style=for-the-badge)](https://github.com/iwatkot/maps4fslocale)
-
-</div>
-
-<div align="center" markdown>
 <img src="https://github.com/iwatkot/pydtmdl/releases/download/0.0.1/pydtmdl.png">
 </a>
 
@@ -110,6 +92,10 @@ high-level `DTMProvider.extract_area(...)` helper.
 The same rectangular ROI workflow is also available for imagery providers and for user-provided
 georeferenced rasters via `ImageryProvider.extract_area(...)` and `extract_area_from_image(...)`.
 
+For production pipelines, both DTM and imagery extraction also accept `min_valid_coverage`.
+When set, pydtmdl rejects outputs with too many no-data pixels and can trigger the configured
+fallback provider.
+
 ## Overview
 `pydtmdl` is a Python library designed to provide access to Digital Terrain Models (DTMs) and raster imagery from various providers. It supports multiple providers, each with its own resolution and data format. The library allows users to easily retrieve terrain or imagery data for specific geographic coordinates and sizes.  
 
@@ -147,6 +133,7 @@ In addition to SRTM 30m, which provides global coverage, the map above highlight
 | 🌎 ArcticDEM                       | 2 meters     | [kbrandwijk](https://github.com/kbrandwijk) |
 | 🌎 REMA Antarctica                 | 2 meters     | [kbrandwijk](https://github.com/kbrandwijk) |
 | 🇺🇸 USGS                            | 1-90 meters  | [ZenJakey](https://github.com/ZenJakey)     |
+| 🇦🇹 Austria                         | 1 meter      | [iwatkot](https://github.com/iwatkot)       |
 | 🏴󠁧󠁢󠁥󠁮󠁧󠁿 England                         | 1 meter      | [kbrandwijk](https://github.com/kbrandwijk) |
 | 🏴󠁧󠁢󠁳󠁣󠁴󠁿 Scotland                        | 0.25-1 meter | [kbrandwijk](https://github.com/kbrandwijk) |
 | 🏴󠁧󠁢󠁷󠁬󠁳󠁿󠁧󠁢󠁷󠁬󠁳󠁿 Wales                           | 1 meter      | [garnwenshared](https://github.com/garnshared) |
@@ -181,7 +168,11 @@ structured metadata, and local caching.
 | --------------------------- | --------------------------- | ---------- | ----- |
 | Sentinel-2 L2A RGB          | Global land coverage        | 10 meters  | Free global fallback built from public STAC + COG assets |
 | NAIP RGB                    | Contiguous United States    | 0.3-0.6 m  | High-resolution USDA orthophotos, public domain |
-| Local Raster                | User-provided georeferenced raster | source-dependent | Extract the same rotated ROI from your own GeoTIFF/COG |
+| North Rhine-Westphalia DOP RGB | North Rhine-Westphalia, Germany | 0.1 m | State orthophoto WMS |
+| Bavaria DOP20 RGB           | Bavaria, Germany            | 0.2 m      | State orthophoto WMS |
+| Hessen DOP20 RGB            | Hessen, Germany             | 0.2 m      | State orthophoto WMS |
+| Lower Saxony DOP20 RGB      | Lower Saxony, Germany       | 0.2 m      | State orthophoto WMS |
+| Thuringia DOP20 RGB         | Thuringia, Germany          | 0.2 m      | State orthophoto WMS |
 
 Example imagery usage:
 
@@ -194,6 +185,7 @@ result = ImageryProvider.extract_area(
     width_m=2048,
     height_m=2048,
     provider_code="naip",
+    min_valid_coverage=0.98,
     user_settings=NAIPImagerySettings(
         date_from="2020-01-01",
         date_to="2026-12-31",
@@ -322,8 +314,8 @@ There are three main approaches to implementing a DTM provider:
 2. **WCS-based** - Inherit from both `WCSProvider` and `DTMProvider` for OGC WCS services
 3. **WMS-based** - Inherit from both `WMSProvider` and `DTMProvider` for OGC WMS services
 
-For imagery providers, the simplest approach is usually a custom implementation inheriting from
-`ImageryProvider`, as shown by the Sentinel-2 and NAIP providers in
+For imagery providers, use `ImageryProvider` for custom STAC/COG-style integrations or
+`WMSImageryProvider` for WMS orthophoto services. Examples live in
 [pydtmdl/imagery_providers/](pydtmdl/imagery_providers/).
 
 ### Example 1: Custom Provider (SRTM)
