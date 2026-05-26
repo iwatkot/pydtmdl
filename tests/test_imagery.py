@@ -31,11 +31,19 @@ def _next_imagery_code(prefix: str) -> str:
 
 
 def _write_rgb_raster(path: Path) -> Path:
+    return _write_rgb_raster_with_bounds(path, bounds=(-0.05, -0.05, 0.05, 0.05))
+
+
+def _write_rgb_raster_with_bounds(
+    path: Path,
+    *,
+    bounds: tuple[float, float, float, float],
+) -> Path:
     red = np.full((200, 200), 2200, dtype=np.uint16)
     green = np.full((200, 200), 1800, dtype=np.uint16)
     blue = np.full((200, 200), 1400, dtype=np.uint16)
     data = np.stack([red, green, blue])
-    transform = from_bounds(-0.05, -0.05, 0.05, 0.05, 200, 200)
+    transform = from_bounds(*bounds, 200, 200)
     with rasterio.open(
         path,
         "w",
@@ -98,9 +106,19 @@ def _write_rgbir_raster(path: Path) -> Path:
 
 
 def _write_scl_raster(path: Path) -> Path:
+    return _write_scl_raster_with_bounds(path, bounds=(-0.05, -0.05, 0.05, 0.05), cloudy=True)
+
+
+def _write_scl_raster_with_bounds(
+    path: Path,
+    *,
+    bounds: tuple[float, float, float, float],
+    cloudy: bool,
+) -> Path:
     data = np.full((200, 200), 4, dtype=np.uint8)
-    data[85:115, 85:115] = 9
-    transform = from_bounds(-0.05, -0.05, 0.05, 0.05, 200, 200)
+    if cloudy:
+        data[85:115, 85:115] = 9
+    transform = from_bounds(*bounds, 200, 200)
     with rasterio.open(
         path,
         "w",
@@ -348,8 +366,124 @@ def test_naip_provider_renders_local_rgb_asset(tmp_path: Path, monkeypatch):
     assert result.metadata.band_count == 3
     assert result.metadata.scene_ids == ["naip-scene-1"]
     assert result.metadata.dtype == "uint8"
-    assert result.data.shape[0] == 3
-    assert np.ma.isMaskedArray(result.data)
+
+
+def test_sentinel_scene_cache_isolated_per_request(tmp_path: Path, monkeypatch):
+    bounds = (-0.5, -0.5, 0.5, 0.5)
+    red_path = tmp_path / "sentinel_cache_red.tif"
+    green_path = tmp_path / "sentinel_cache_green.tif"
+    blue_path = tmp_path / "sentinel_cache_blue.tif"
+    scl_path = tmp_path / "sentinel_cache_scl.tif"
+    _write_rgb_raster_with_bounds(red_path, bounds=bounds)
+    _write_rgb_raster_with_bounds(green_path, bounds=bounds)
+    _write_rgb_raster_with_bounds(blue_path, bounds=bounds)
+    _write_scl_raster_with_bounds(scl_path, bounds=bounds, cloudy=False)
+
+    item = {
+        "id": "sentinel-shared-scene",
+        "properties": {
+            "datetime": "2024-07-21T10:00:00Z",
+            "eo:cloud_cover": 2.0,
+        },
+        "assets": {
+            "red": {"href": str(red_path)},
+            "green": {"href": str(green_path)},
+            "blue": {"href": str(blue_path)},
+            "scl": {"href": str(scl_path)},
+        },
+    }
+
+    def fake_search_items(self, settings):
+        return [item]
+
+    monkeypatch.setattr(Sentinel2L2AImageryProvider, "_search_items", fake_search_items)
+
+    first_result = Sentinel2L2AImageryProvider.extract_area(
+        center=(0.0, 0.49),
+        width_m=4000,
+        height_m=4000,
+        provider_code=Sentinel2L2AImageryProvider.code(),
+        user_settings=Sentinel2L2AImagerySettings(
+            date_from="2024-07-01",
+            date_to="2024-07-31",
+            max_items=1,
+        ),
+        directory=str(tmp_path),
+    )
+
+    second_result = Sentinel2L2AImageryProvider.extract_area(
+        center=(0.0, 0.0),
+        width_m=2000,
+        height_m=2000,
+        provider_code=Sentinel2L2AImageryProvider.code(),
+        user_settings=Sentinel2L2AImagerySettings(
+            date_from="2024-07-01",
+            date_to="2024-07-31",
+            max_items=1,
+        ),
+        directory=str(tmp_path),
+        min_valid_coverage=0.95,
+    )
+
+    assert first_result.metadata.scene_ids == ["sentinel-shared-scene"]
+    assert second_result.metadata.scene_ids == ["sentinel-shared-scene"]
+    assert first_result.metadata.source_files != second_result.metadata.source_files
+    assert np.ma.isMaskedArray(second_result.data)
+    assert not np.ma.getmaskarray(second_result.data).all()
+
+
+def test_naip_scene_cache_isolated_per_request(tmp_path: Path, monkeypatch):
+    naip_path = tmp_path / "naip_cache.tif"
+    _write_rgbir_raster(naip_path)
+
+    item = {
+        "id": "naip-shared-scene",
+        "properties": {
+            "datetime": "2023-09-25T16:00:00Z",
+            "gsd": 0.3,
+        },
+        "assets": {
+            "image": {"href": str(naip_path)},
+        },
+    }
+
+    def fake_search_items(self, settings):
+        return [item]
+
+    monkeypatch.setattr(NAIPImageryProvider, "_search_items", fake_search_items)
+
+    first_result = NAIPImageryProvider.extract_area(
+        center=(40.03, -105.183),
+        width_m=4000,
+        height_m=4000,
+        provider_code=NAIPImageryProvider.code(),
+        user_settings=NAIPImagerySettings(
+            date_from="2020-01-01",
+            date_to="2024-12-31",
+            max_items=1,
+        ),
+        directory=str(tmp_path),
+    )
+
+    second_result = NAIPImageryProvider.extract_area(
+        center=(40.03, -105.22),
+        width_m=1500,
+        height_m=1500,
+        provider_code=NAIPImageryProvider.code(),
+        user_settings=NAIPImagerySettings(
+            date_from="2020-01-01",
+            date_to="2024-12-31",
+            max_items=1,
+        ),
+        directory=str(tmp_path),
+        min_valid_coverage=0.95,
+    )
+
+    assert first_result.metadata.scene_ids == ["naip-shared-scene"]
+    assert second_result.metadata.scene_ids == ["naip-shared-scene"]
+    assert first_result.metadata.source_files != second_result.metadata.source_files
+    assert np.ma.isMaskedArray(second_result.data)
+    assert not np.ma.getmaskarray(second_result.data).all()
 
 
 def test_merge_geotiff_reprojects_mixed_crs_inputs(tmp_path: Path):

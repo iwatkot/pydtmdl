@@ -51,8 +51,8 @@ class NAIPImageryProvider(ImageryProvider):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.shared_tiff_path = os.path.join(self._source_tile_directory, "shared")
-        os.makedirs(self.shared_tiff_path, exist_ok=True)
+        self.scene_tiff_path = os.path.join(self.cache_path, "scenes")
+        os.makedirs(self.scene_tiff_path, exist_ok=True)
         self._scene_ids: list[str] = []
 
     def download_tiles(self) -> list[str]:
@@ -85,7 +85,7 @@ class NAIPImageryProvider(ImageryProvider):
         rendered_tiles: list[str] = []
         rendered_scene_ids: list[str] = []
         for item in items:
-            output_path = os.path.join(self.shared_tiff_path, f"{item['id']}.tif")
+            output_path = os.path.join(self.scene_tiff_path, f"{item['id']}.tif")
             scene_cached = os.path.exists(output_path)
             rendered_path = self._render_item(item, output_path)
             if rendered_path is None:
