@@ -4,8 +4,8 @@ from pydtmdl.providers.austria import AustriaProvider
 from pydtmdl.providers.baden import BadenWurttembergProvider
 from pydtmdl.providers.bavaria import BavariaProvider
 from pydtmdl.providers.canada import CanadaProvider
-from pydtmdl.providers.czech_dmr5g import CzechProviderDMR5G
 from pydtmdl.providers.czech import CzechProvider
+from pydtmdl.providers.czech_dmr5g import CzechProviderDMR5G
 from pydtmdl.providers.denmark import DenmarkProvider
 from pydtmdl.providers.england import England1MProvider
 from pydtmdl.providers.finland import FinlandProvider
@@ -17,8 +17,8 @@ from pydtmdl.providers.lithuania import LithuaniaProvider
 from pydtmdl.providers.mv import MecklenburgVorpommernProvider
 from pydtmdl.providers.niedersachsen import NiedersachsenProvider
 from pydtmdl.providers.norway import NorwayProvider
-from pydtmdl.providers.poland import PolandDTM1MProvider
 from pydtmdl.providers.nrw import NRWProvider
+from pydtmdl.providers.poland import PolandDTM1MProvider
 from pydtmdl.providers.rema import REMAProvider
 from pydtmdl.providers.sachsenanhalt import SachsenAnhaltProvider
 from pydtmdl.providers.scotland import ScotlandProvider

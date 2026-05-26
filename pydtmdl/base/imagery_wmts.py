@@ -5,12 +5,12 @@ from __future__ import annotations
 import math
 import os
 from abc import abstractmethod
-from typing import Any
+from typing import cast
 
+import requests
 from pyproj import Transformer
 from rasterio.io import MemoryFile
 from rasterio.transform import from_bounds
-import requests
 
 from pydtmdl.base.imagery import ImageryProvider
 
@@ -58,7 +58,7 @@ class WMTSImageryProvider(ImageryProvider):
             return f"{self._zoom}_{tile_row}_{tile_col}.tif"
 
         return self.download_tiles_with_fetcher(
-            tiles,
+            cast(list[tuple[float, float, float, float]], tiles),
             self.shared_tiff_path,
             tile_fetcher,
             file_name_generator=file_name_generator,

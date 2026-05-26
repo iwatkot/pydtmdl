@@ -169,6 +169,10 @@ for production workloads.
 The imagery stack uses the same rectangular ROI API as the DTM stack, including rotation,
 structured metadata, and local caching.
 
+Recently added European imagery providers cover both WMS and WMTS sources, so the imagery stack
+now includes national orthophotos for Austria, France, Spain, the Netherlands, Luxembourg, several
+German states, plus the pan-European Copernicus VHR fallback.
+
 | Provider Name               | Coverage                    | Resolution | Notes |
 | --------------------------- | --------------------------- | ---------- | ----- |
 | Sentinel-2 L2A RGB          | Global land coverage        | 10 meters  | Free global fallback built from public STAC + COG assets |
@@ -190,26 +194,44 @@ Note: the Poland orthophoto provider is included for users who can reach the off
 Geoportal services. In some environments, especially outside Poland, `mapy.geoportal.gov.pl` may not
 resolve or may reject requests. Use Sentinel-2 or local imagery as the production fallback.
 
+Common provider codes:
+
+- `austria_basemap_orthofoto`
+- `france_bdortho`
+- `spain_pnoa`
+- `netherlands_luchtfoto_hr`
+- `luxembourg_orthophoto`
+- `copernicus_vhr_2021`
+- `nrw_dop`
+- `bavaria_dop20`
+- `hessen_dop20`
+- `niedersachsen_dop20`
+- `thuringia_dop20`
+- `poland_orto_highres`
+- `sentinel2_l2a`
+- `naip`
+
 Example imagery usage:
 
 ```python
 from pydtmdl import ImageryProvider
-from pydtmdl.imagery_providers.naip import NAIPImagerySettings
 
 result = ImageryProvider.extract_area(
-    center=(40.03, -105.22),
+    center=(48.2082, 16.3738),
     width_m=2048,
     height_m=2048,
-    provider_code="naip",
+    provider_code="austria_basemap_orthofoto",
     min_valid_coverage=0.98,
-    user_settings=NAIPImagerySettings(
-        date_from="2020-01-01",
-        date_to="2026-12-31",
-        max_items=8,
-    ),
 )
 print(result.metadata.model_dump())
 ```
+
+For country-specific smoke tests and visual validation, see the bundled preview scripts:
+
+- `germany-imagery.py`
+- `europe-imagery.py`
+- `austria-imagery.py`
+- `poland-dtm-imagery.py`
 
 Example local raster usage:
 
@@ -330,8 +352,9 @@ There are three main approaches to implementing a DTM provider:
 2. **WCS-based** - Inherit from both `WCSProvider` and `DTMProvider` for OGC WCS services
 3. **WMS-based** - Inherit from both `WMSProvider` and `DTMProvider` for OGC WMS services
 
-For imagery providers, use `ImageryProvider` for custom STAC/COG-style integrations or
-`WMSImageryProvider` for WMS orthophoto services. Examples live in
+For imagery providers, use `ImageryProvider` for custom STAC/COG-style integrations,
+`WMSImageryProvider` for WMS orthophoto services, or `WMTSImageryProvider` for Google-style WMTS
+tile services such as basemap.at orthophotos. Examples live in
 [pydtmdl/imagery_providers/](pydtmdl/imagery_providers/).
 
 ### Example 1: Custom Provider (SRTM)
