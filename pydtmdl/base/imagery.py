@@ -162,6 +162,7 @@ class ImageryProvider(DTMProvider):
         fallback_user_settings: DTMProviderSettings | None = None,
         directory: str = os.path.join(os.getcwd(), "tiles"),
         logger: Any = logging.getLogger(__name__),
+        min_valid_coverage: float | None = None,
     ) -> ImageryExtractionResult:
         """High-level extraction API for imagery providers."""
         resolved_height = height_m if height_m is not None else width_m
@@ -199,6 +200,7 @@ class ImageryProvider(DTMProvider):
             width_m=width_m,
             height_m=resolved_height,
             rotation_deg=rotation_deg,
+            min_valid_coverage=min_valid_coverage,
         )
         return cast(
             ImageryExtractionResult,
@@ -332,6 +334,7 @@ class ImageryProvider(DTMProvider):
                     provider_code=self.code(),
                     provider_name=self.name(),
                 )
+            self._validate_min_valid_coverage(data)
             metadata = ImageryResultMetadata(
                 requested_provider=requested_provider_code,
                 requested_provider_name=requested_provider_name,
@@ -382,3 +385,19 @@ class ImageryProvider(DTMProvider):
                 "Failed to read cached metadata from %s: %s", self._metadata_path, e
             )
             return None
+
+    def _coverage_mask(self, data: np.ndarray | np.ma.MaskedArray) -> np.ndarray:
+        """Return a 2D mask where imagery pixels contain visible valid data."""
+        if data.ndim != 3:
+            return super()._coverage_mask(data)
+
+        array = np.ma.array(data, copy=False)
+        invalid = np.ma.getmaskarray(array)
+        if invalid.ndim == 3:
+            masked = np.any(invalid, axis=0)
+        else:
+            masked = invalid
+
+        values = np.asarray(array.filled(0))
+        all_zero = np.all(values == 0, axis=0)
+        return ~(masked | all_zero)

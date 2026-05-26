@@ -9,7 +9,7 @@ import rasterio
 import requests
 from rasterio.transform import from_bounds
 
-from pydtmdl import DownloadFailedError, DTMProvider, ProviderUnavailableError
+from pydtmdl import CropExtractionError, DownloadFailedError, DTMProvider, ProviderUnavailableError
 
 _PROVIDER_COUNTER = count()
 
@@ -20,6 +20,26 @@ def _next_code(prefix: str) -> str:
 
 def _write_test_raster(path: Path) -> Path:
     data = np.arange(400 * 400, dtype=np.float32).reshape(400, 400)
+    transform = from_bounds(-0.05, -0.05, 0.05, 0.05, 400, 400)
+    with rasterio.open(
+        path,
+        "w",
+        driver="GTiff",
+        height=data.shape[0],
+        width=data.shape[1],
+        count=1,
+        dtype=data.dtype,
+        crs="EPSG:4326",
+        transform=transform,
+        nodata=-9999.0,
+    ) as dataset:
+        dataset.write(data, 1)
+    return path
+
+
+def _write_partial_test_raster(path: Path) -> Path:
+    data = np.arange(400 * 400, dtype=np.float32).reshape(400, 400)
+    data[190:210, :] = -9999.0
     transform = from_bounds(-0.05, -0.05, 0.05, 0.05, 400, 400)
     with rasterio.open(
         path,
@@ -135,6 +155,33 @@ def test_extract_area_returns_structured_metadata_for_rotated_rectangle(tmp_path
     assert Path(result.metadata.output_path).exists()
     assert np.ma.isMaskedArray(result.data)
     assert not np.ma.getmaskarray(result.data).any()
+
+
+def test_extract_area_rejects_partial_valid_coverage(tmp_path: Path):
+    source_path = _write_partial_test_raster(tmp_path / "source_partial.tif")
+    provider_code = _next_code("partial")
+    provider_class, _ = _make_static_provider(source_path, provider_code)
+
+    with pytest.raises(CropExtractionError, match="insufficient valid coverage"):
+        DTMProvider.extract_area(
+            center=(0.0, 0.0),
+            width_m=2000,
+            height_m=2000,
+            provider_code=provider_class.code(),
+            directory=str(tmp_path),
+            min_valid_coverage=0.95,
+        )
+
+    result = DTMProvider.extract_area(
+        center=(0.0, 0.0),
+        width_m=2000,
+        height_m=2000,
+        provider_code=provider_class.code(),
+        directory=str(tmp_path),
+        min_valid_coverage=0.7,
+    )
+
+    assert result.metadata.actual_provider == provider_code
 
 
 def test_positive_rotation_is_clockwise(tmp_path: Path):

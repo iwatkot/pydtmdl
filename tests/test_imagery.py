@@ -9,6 +9,7 @@ import rasterio
 from rasterio.transform import from_bounds
 
 from pydtmdl import DTMProvider, ImageryProvider
+from pydtmdl.base.dtm import CropExtractionError
 from pydtmdl.imagery_providers.naip import NAIPImageryProvider, NAIPImagerySettings
 from pydtmdl.imagery_providers.sentinel2 import (
     Sentinel2L2AImageryProvider,
@@ -27,6 +28,29 @@ def _write_rgb_raster(path: Path) -> Path:
     green = np.full((200, 200), 1800, dtype=np.uint16)
     blue = np.full((200, 200), 1400, dtype=np.uint16)
     data = np.stack([red, green, blue])
+    transform = from_bounds(-0.05, -0.05, 0.05, 0.05, 200, 200)
+    with rasterio.open(
+        path,
+        "w",
+        driver="GTiff",
+        height=200,
+        width=200,
+        count=3,
+        dtype=data.dtype,
+        crs="EPSG:4326",
+        transform=transform,
+        nodata=0,
+    ) as dataset:
+        dataset.write(data)
+    return path
+
+
+def _write_partial_rgb_raster(path: Path) -> Path:
+    red = np.full((200, 200), 2200, dtype=np.uint16)
+    green = np.full((200, 200), 1800, dtype=np.uint16)
+    blue = np.full((200, 200), 1400, dtype=np.uint16)
+    data = np.stack([red, green, blue])
+    data[:, 95:105, :] = 0
     transform = from_bounds(-0.05, -0.05, 0.05, 0.05, 200, 200)
     with rasterio.open(
         path,
@@ -150,6 +174,33 @@ def test_imagery_provider_extract_area_returns_rgb_result(tmp_path: Path):
     assert result.metadata.dataset == "test-imagery"
     assert result.data.shape[0] == 3
     assert result.data.dtype == np.uint16
+
+
+def test_imagery_provider_rejects_partial_valid_coverage(tmp_path: Path):
+    source_path = _write_partial_rgb_raster(tmp_path / "partial_imagery_source.tif")
+    provider_code = _next_imagery_code("partial_imagery")
+    provider_class, _ = _make_static_imagery_provider(source_path, provider_code)
+
+    with pytest.raises(CropExtractionError, match="insufficient valid coverage"):
+        ImageryProvider.extract_area(
+            center=(0.0, 0.0),
+            width_m=2000,
+            height_m=2000,
+            provider_code=provider_class.code(),
+            directory=str(tmp_path),
+            min_valid_coverage=0.95,
+        )
+
+    result = ImageryProvider.extract_area(
+        center=(0.0, 0.0),
+        width_m=2000,
+        height_m=2000,
+        provider_code=provider_class.code(),
+        directory=str(tmp_path),
+        min_valid_coverage=0.7,
+    )
+
+    assert result.metadata.actual_provider == provider_code
 
 
 def test_dtm_provider_registry_excludes_imagery_providers(tmp_path: Path):

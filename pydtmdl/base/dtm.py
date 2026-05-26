@@ -193,12 +193,16 @@ class DTMProvider(ABC):
         width_m: int | None = None,
         height_m: int | None = None,
         rotation_deg: float = 0.0,
+        min_valid_coverage: float | None = None,
     ):
         self._coordinates = coordinates
         self._user_settings = user_settings
         self._width_m, self._height_m = self._resolve_dimensions(size, width_m, height_m)
         self._size = int(size) if size is not None else max(self._width_m, self._height_m)
         self._rotation_deg = float(rotation_deg % 360)
+        if min_valid_coverage is not None and not 0.0 <= min_valid_coverage <= 1.0:
+            raise ValueError("min_valid_coverage must be between 0.0 and 1.0.")
+        self._min_valid_coverage = min_valid_coverage
         self._download_width_m, self._download_height_m = self._calculate_download_dimensions(
             self._width_m,
             self._height_m,
@@ -674,6 +678,7 @@ class DTMProvider(ABC):
                 width_m=self.width_m,
                 height_m=self.height_m,
                 rotation_deg=self.rotation_deg,
+                min_valid_coverage=self._min_valid_coverage,
             )
             try:
                 return fallback_provider._create_result(
@@ -698,6 +703,7 @@ class DTMProvider(ABC):
         fallback_user_settings: DTMProviderSettings | None = None,
         directory: str = os.path.join(os.getcwd(), "tiles"),
         logger: Any = logging.getLogger(__name__),
+        min_valid_coverage: float | None = None,
     ) -> DTMExtractionResult:
         """High-level extraction API for rectangular and rotated ROIs."""
         resolved_height = height_m if height_m is not None else width_m
@@ -733,6 +739,7 @@ class DTMProvider(ABC):
             width_m=width_m,
             height_m=resolved_height,
             rotation_deg=rotation_deg,
+            min_valid_coverage=min_valid_coverage,
         )
         return provider.get_result(
             fallback_provider_code=fallback_provider_code,
@@ -1453,9 +1460,39 @@ class DTMProvider(ABC):
     def _write_result_tiff(self, tile_path: str, output_path: str) -> None:
         """Write the cropped ROI raster to the stable cache path."""
         data, metadata = self._extract_roi_raster(tile_path)
+        self._validate_min_valid_coverage(data)
         filled_data = data.filled(metadata["nodata"]) if np.ma.isMaskedArray(data) else data
         with rasterio.open(output_path, "w", **metadata) as dst:
             dst.write(filled_data)
+
+    def _coverage_mask(self, data: np.ndarray | np.ma.MaskedArray) -> np.ndarray:
+        """Return a 2D mask where pixels contain valid output data."""
+        if np.ma.isMaskedArray(data):
+            invalid = np.ma.getmaskarray(data)
+            if invalid.ndim == 3:
+                return ~np.all(invalid, axis=0)
+            return ~invalid
+        if data.ndim == 3:
+            return np.ones(data.shape[1:], dtype=bool)
+        return np.ones(data.shape, dtype=bool)
+
+    def _validate_min_valid_coverage(self, data: np.ndarray | np.ma.MaskedArray) -> None:
+        """Fail when the output raster has more no-data pixels than allowed."""
+        if self._min_valid_coverage is None:
+            return
+
+        valid = self._coverage_mask(data)
+        total_pixels = valid.size
+        coverage = float(valid.sum() / total_pixels) if total_pixels else 0.0
+        if coverage < self._min_valid_coverage:
+            raise CropExtractionError(
+                (
+                    "The output raster has insufficient valid coverage: "
+                    f"{coverage:.2%} valid, required {self._min_valid_coverage:.2%}."
+                ),
+                provider_code=self.code(),
+                provider_name=self.name(),
+            )
 
     def _extract_roi_raster(self, tile_path: str) -> tuple[np.ma.MaskedArray, dict[str, Any]]:
         """Extract the requested ROI using the appropriate rasterization path."""
@@ -1663,6 +1700,7 @@ class DTMProvider(ABC):
                     provider_code=self.code(),
                     provider_name=self.name(),
                 )
+            self._validate_min_valid_coverage(data)
             metadata = DTMResultMetadata(
                 requested_provider=requested_provider_code,
                 requested_provider_name=requested_provider_name,
