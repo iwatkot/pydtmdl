@@ -158,6 +158,11 @@ In addition to SRTM 30m, which provides global coverage, the map above highlight
 | 🇨🇿 Czech Republic                  | 5 meter      | [kbrandwijk](https://github.com/kbrandwijk) |
 | 🇨🇿 Czech Republic                  | 2 meter      | [VidhosticeSDK](https://github.com/VidhosticeSDK) |
 | 🇱🇹 Lithuania                       | 1 meter      | [Tox3](https://github.com/Tox3) |
+| 🇵🇱 Poland                          | 1 meter      | [iwatkot](https://github.com/iwatkot) |
+
+Note: the Poland DTM provider uses the official Geoportal/GUGiK service. The service may be
+unreachable from some networks or from IP addresses outside Poland, so configure a fallback provider
+for production workloads.
 
 ## Supported Imagery Providers
 
@@ -173,6 +178,11 @@ structured metadata, and local caching.
 | Hessen DOP20 RGB            | Hessen, Germany             | 0.2 m      | State orthophoto WMS |
 | Lower Saxony DOP20 RGB      | Lower Saxony, Germany       | 0.2 m      | State orthophoto WMS |
 | Thuringia DOP20 RGB         | Thuringia, Germany          | 0.2 m      | State orthophoto WMS |
+| Poland high-resolution orthophoto | Poland               | 0.25 m metadata / locally higher in places | Official Geoportal/GUGiK WMS; may be blocked outside Poland |
+
+Note: the Poland orthophoto provider is included for users who can reach the official Polish
+Geoportal services. In some environments, especially outside Poland, `mapy.geoportal.gov.pl` may not
+resolve or may reject requests. Use Sentinel-2 or local imagery as the production fallback.
 
 Example imagery usage:
 

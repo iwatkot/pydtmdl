@@ -7,4 +7,5 @@ from pydtmdl.imagery_providers.germany import (
     ThuringiaImageryProvider,
 )
 from pydtmdl.imagery_providers.naip import NAIPImageryProvider
+from pydtmdl.imagery_providers.poland import PolandHighResolutionOrthophotoProvider
 from pydtmdl.imagery_providers.sentinel2 import Sentinel2L2AImageryProvider

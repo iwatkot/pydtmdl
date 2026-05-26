@@ -17,6 +17,7 @@ from pydtmdl.providers.lithuania import LithuaniaProvider
 from pydtmdl.providers.mv import MecklenburgVorpommernProvider
 from pydtmdl.providers.niedersachsen import NiedersachsenProvider
 from pydtmdl.providers.norway import NorwayProvider
+from pydtmdl.providers.poland import PolandDTM1MProvider
 from pydtmdl.providers.nrw import NRWProvider
 from pydtmdl.providers.rema import REMAProvider
 from pydtmdl.providers.sachsenanhalt import SachsenAnhaltProvider
