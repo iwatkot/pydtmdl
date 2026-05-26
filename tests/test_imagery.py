@@ -1,13 +1,11 @@
 from __future__ import annotations
 
-from io import BytesIO
 from itertools import count
 from pathlib import Path
 
 import numpy as np
 import pytest
 import rasterio
-from PIL import Image
 from pyproj import Transformer
 from rasterio.io import MemoryFile
 from rasterio.transform import from_bounds
@@ -120,10 +118,21 @@ def _write_rgbir_raster(path: Path) -> Path:
 
 
 def _make_rgb_jpeg_bytes() -> bytes:
-    image = Image.new("RGB", (32, 24), color=(120, 90, 60))
-    output = BytesIO()
-    image.save(output, format="JPEG")
-    return output.getvalue()
+    data = np.zeros((3, 24, 32), dtype=np.uint8)
+    data[0, :, :] = 120
+    data[1, :, :] = 90
+    data[2, :, :] = 60
+
+    with MemoryFile() as memory_file:
+        with memory_file.open(
+            driver="JPEG",
+            width=32,
+            height=24,
+            count=3,
+            dtype=data.dtype,
+        ) as dataset:
+            dataset.write(data)
+        return memory_file.read()
 
 
 def _write_scl_raster(path: Path) -> Path:
