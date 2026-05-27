@@ -11,7 +11,7 @@ from rasterio.io import MemoryFile
 from rasterio.transform import from_bounds
 
 from pydtmdl import DTMProvider, ImageryProvider
-from pydtmdl.base.dtm import CropExtractionError
+from pydtmdl.base.dtm import CropExtractionError, DownloadFailedError
 from pydtmdl.base.imagery_wms import WMSImageryProvider
 from pydtmdl.base.imagery_wmts import WMTSImageryProvider
 from pydtmdl.imagery_providers.austria import AustriaBasemapOrthophotoImageryProvider
@@ -266,6 +266,43 @@ def test_wms_imagery_provider_georeferences_jpeg_bytes(tmp_path: Path):
             assert dataset.bounds.bottom == pytest.approx(tile[0])
             assert dataset.bounds.right == pytest.approx(tile[3])
             assert dataset.bounds.top == pytest.approx(tile[2])
+
+
+def test_tile_download_failure_threshold_aborts_provider(tmp_path: Path):
+    class FailingWMSImageryProvider(WMSImageryProvider):
+        _code = _next_imagery_code("failing_wms")
+        _name = "Failing WMS"
+        _region = "Test"
+        _icon = "I"
+        _resolution = 1.0
+        _dataset = "test-failing-wms"
+        _extents = [(1.0, -1.0, 1.0, -1.0)]
+        _url = "https://example.invalid/wms"
+        _max_retries = 1
+
+        def get_wms_parameters(self, tile: tuple[float, float, float, float]) -> dict:
+            return {}
+
+    provider = FailingWMSImageryProvider(
+        coordinates=(0.0, 0.0),
+        width_m=1000,
+        height_m=1000,
+        directory=str(tmp_path),
+        max_failed_tiles=2,
+        max_failed_tile_ratio=0.5,
+    )
+    tiles = [
+        (0.0, 0.0, 1.0, 1.0),
+        (1.0, 1.0, 2.0, 2.0),
+        (2.0, 2.0, 3.0, 3.0),
+    ]
+
+    with pytest.raises(DownloadFailedError, match="2/2 observed tiles failed"):
+        provider.download_tiles_with_fetcher(
+            tiles,
+            str(tmp_path),
+            lambda _tile: (_ for _ in ()).throw(RuntimeError("service unavailable")),
+        )
 
 
 def test_european_imagery_providers_are_registered():

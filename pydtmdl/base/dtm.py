@@ -194,6 +194,8 @@ class DTMProvider(ABC):
         height_m: int | None = None,
         rotation_deg: float = 0.0,
         min_valid_coverage: float | None = None,
+        max_failed_tiles: int | None = None,
+        max_failed_tile_ratio: float = 1.0,
     ):
         self._coordinates = coordinates
         self._user_settings = user_settings
@@ -203,6 +205,12 @@ class DTMProvider(ABC):
         if min_valid_coverage is not None and not 0.0 <= min_valid_coverage <= 1.0:
             raise ValueError("min_valid_coverage must be between 0.0 and 1.0.")
         self._min_valid_coverage = min_valid_coverage
+        if max_failed_tiles is not None and max_failed_tiles < 0:
+            raise ValueError("max_failed_tiles must be greater than or equal to 0.")
+        if not 0.0 <= max_failed_tile_ratio <= 1.0:
+            raise ValueError("max_failed_tile_ratio must be between 0.0 and 1.0.")
+        self._max_failed_tiles = max_failed_tiles
+        self._max_failed_tile_ratio = max_failed_tile_ratio
         self._download_width_m, self._download_height_m = self._calculate_download_dimensions(
             self._width_m,
             self._height_m,
@@ -1109,6 +1117,8 @@ class DTMProvider(ABC):
         if file_name_generator is None:
             file_name_generator = default_file_name
 
+        successful_tiles = 0
+        failed_tiles = 0
         for tile in tqdm(tiles, desc="Downloading tiles with fetcher", unit="tile"):
             file_name = file_name_generator(tile)
             file_path = os.path.join(output_path, file_name)
@@ -1150,10 +1160,27 @@ class DTMProvider(ABC):
                             )
 
                 if not success:
+                    failed_tiles += 1
+                    observed_tiles = successful_tiles + failed_tiles
+                    failed_ratio = failed_tiles / observed_tiles
+                    if (
+                        self._max_failed_tiles is not None
+                        and failed_tiles >= self._max_failed_tiles
+                        and failed_ratio >= self._max_failed_tile_ratio
+                    ):
+                        raise DownloadFailedError(
+                            "Aborting tile download after "
+                            f"{failed_tiles}/{observed_tiles} observed tiles failed "
+                            f"({failed_ratio:.0%}; threshold {self._max_failed_tiles} "
+                            f"failed tiles at {self._max_failed_tile_ratio:.0%}).",
+                            provider_code=self.code(),
+                            provider_name=self.name(),
+                        )
                     continue  # Skip this tile if all retries failed
             else:
                 self.logger.debug("File already exists: %s", file_name)
 
+            successful_tiles += 1
             all_tif_files.append(file_path)
 
         return all_tif_files

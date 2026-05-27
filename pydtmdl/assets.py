@@ -456,6 +456,8 @@ def _instantiate_provider(
     directory: str,
     logger: Any,
     min_valid_coverage: float | None,
+    max_failed_tiles: int | None = None,
+    max_failed_tile_ratio: float = 1.0,
 ) -> DTMProvider:
     return provider_class(
         center,
@@ -467,6 +469,8 @@ def _instantiate_provider(
         height_m=source_height_m,
         rotation_deg=rotation_deg,
         min_valid_coverage=min_valid_coverage,
+        max_failed_tiles=max_failed_tiles,
+        max_failed_tile_ratio=max_failed_tile_ratio,
     )
 
 
@@ -841,6 +845,8 @@ def extract_project_imagery(
     directory: str = os.path.join(os.getcwd(), "tiles"),
     logger: Any = logging.getLogger(__name__),
     min_valid_coverage: float | None = None,
+    max_failed_tiles: int | None = None,
+    max_failed_tile_ratio: float = 1.0,
     source_buffer_m: float | None = None,
     output_basename: str = "imagery",
     max_edge: int = 8192,
@@ -872,6 +878,8 @@ def extract_project_imagery(
         directory=directory,
         logger=logger,
         min_valid_coverage=min_valid_coverage,
+        max_failed_tiles=max_failed_tiles,
+        max_failed_tile_ratio=max_failed_tile_ratio,
     )
     requested_provider_code = provider.code() or provider_code or "unknown"
     requested_provider_name = provider.name()
@@ -917,6 +925,8 @@ def extract_project_imagery(
             directory=directory,
             logger=logger,
             min_valid_coverage=min_valid_coverage,
+            max_failed_tiles=max_failed_tiles,
+            max_failed_tile_ratio=max_failed_tile_ratio,
         )
         return _extract_project_imagery_with_provider(
             fallback_provider,
