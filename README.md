@@ -149,6 +149,7 @@ In addition to SRTM 30m, which provides global coverage, the map above highlight
 | 🇧🇪 Flanders, Belgium               | 1 meter      | [kbrandwijk](https://github.com/kbrandwijk) |
 | 🇫🇷 France                          | 1 meter      | [kbrandwijk](https://github.com/kbrandwijk) |
 | 🇮🇹 Italy                           | 10 meter     | [kbrandwijk](https://github.com/kbrandwijk) |
+| 🇳🇱 Netherlands AHN4                | 0.5 meter    | [GitHub Copilot](https://github.com/features/copilot) |
 | 🇳🇴 Norway                          | 1 meter      | [kbrandwijk](https://github.com/kbrandwijk) |
 | 🇪🇸 Spain                           | 5 meter      | [kbrandwijk](https://github.com/kbrandwijk) |
 | 🇫🇮 Finland                         | 2 meter      | [kbrandwijk](https://github.com/kbrandwijk) |
