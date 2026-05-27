@@ -210,6 +210,100 @@ class ImageryProvider(DTMProvider):
             ),
         )
 
+    @classmethod
+    def extract_project_imagery_from_file(
+        cls,
+        *,
+        image_path: str,
+        center: tuple[float, float],
+        width_m: int,
+        height_m: int | None = None,
+        rotation_deg: float = 0.0,
+        directory: str = os.path.join(os.getcwd(), "tiles"),
+        logger: Any = logging.getLogger(__name__),
+        source_buffer_m: float | None = None,
+        output_basename: str = "imagery",
+        max_edge: int = 8192,
+        max_pixels: int | None = None,
+        target_resolution_m: float | None = None,
+        destination_crs: str = "auto-utm",
+        resampling: str = "bilinear",
+        jpeg_quality: int = 90,
+    ) -> Any:
+        """Generate an application-ready capped JPEG preview from a local raster."""
+        from pydtmdl.assets import extract_project_imagery_from_file
+
+        return extract_project_imagery_from_file(
+            image_path=image_path,
+            center=center,
+            width_m=width_m,
+            height_m=height_m,
+            rotation_deg=rotation_deg,
+            directory=directory,
+            logger=logger,
+            source_buffer_m=source_buffer_m,
+            output_basename=output_basename,
+            max_edge=max_edge,
+            max_pixels=max_pixels,
+            target_resolution_m=target_resolution_m,
+            destination_crs=destination_crs,
+            resampling=resampling,
+            jpeg_quality=jpeg_quality,
+        )
+
+    @classmethod
+    def extract_project_imagery(
+        cls,
+        *,
+        center: tuple[float, float],
+        width_m: int,
+        height_m: int | None = None,
+        rotation_deg: float = 0.0,
+        provider_code: str | None = None,
+        fallback_provider_code: str | None = None,
+        user_settings: DTMProviderSettings | None = None,
+        fallback_user_settings: DTMProviderSettings | None = None,
+        directory: str = os.path.join(os.getcwd(), "tiles"),
+        logger: Any = logging.getLogger(__name__),
+        min_valid_coverage: float | None = None,
+        source_buffer_m: float | None = None,
+        output_basename: str = "imagery",
+        max_edge: int = 8192,
+        max_pixels: int | None = None,
+        target_resolution_m: float | None = None,
+        destination_crs: str = "auto-utm",
+        resampling: str = "bilinear",
+        jpeg_quality: int = 90,
+    ) -> Any:
+        """Generate an application-ready capped JPEG preview for a project."""
+        from pydtmdl.assets import extract_project_imagery
+
+        if cls is ImageryProvider:
+            resolved_provider_code = provider_code
+        else:
+            resolved_provider_code = cls.code()
+        return extract_project_imagery(
+            center=center,
+            width_m=width_m,
+            height_m=height_m,
+            rotation_deg=rotation_deg,
+            provider_code=resolved_provider_code,
+            fallback_provider_code=fallback_provider_code,
+            user_settings=user_settings,
+            fallback_user_settings=fallback_user_settings,
+            directory=directory,
+            logger=logger,
+            min_valid_coverage=min_valid_coverage,
+            source_buffer_m=source_buffer_m,
+            output_basename=output_basename,
+            max_edge=max_edge,
+            max_pixels=max_pixels,
+            target_resolution_m=target_resolution_m,
+            destination_crs=destination_crs,
+            resampling=resampling,
+            jpeg_quality=jpeg_quality,
+        )
+
     def _resample_rotated_roi(self, tile_path: str) -> tuple[np.ma.MaskedArray, dict[str, Any]]:
         """Resample a rotated multi-band ROI onto an aligned output grid."""
         local_crs = self._build_local_crs(self.coordinates)

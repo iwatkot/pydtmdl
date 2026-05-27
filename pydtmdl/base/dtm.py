@@ -746,6 +746,57 @@ class DTMProvider(ABC):
             fallback_user_settings=fallback_user_settings,
         )
 
+    @classmethod
+    def extract_project_dtm(
+        cls,
+        *,
+        center: tuple[float, float],
+        width_m: int,
+        height_m: int | None = None,
+        rotation_deg: float = 0.0,
+        provider_code: str | None = None,
+        fallback_provider_code: str | None = None,
+        user_settings: DTMProviderSettings | None = None,
+        fallback_user_settings: DTMProviderSettings | None = None,
+        directory: str = os.path.join(os.getcwd(), "tiles"),
+        logger: Any = logging.getLogger(__name__),
+        min_valid_coverage: float | None = None,
+        source_buffer_m: float | None = None,
+        output_basename: str = "dtm",
+        max_edge: int = 8192,
+        max_pixels: int | None = None,
+        target_resolution_m: float | None = None,
+        destination_crs: str = "auto-utm",
+        resampling: str = "bilinear",
+    ) -> Any:
+        """Generate application-ready DTM PNG assets for a project."""
+        from pydtmdl.assets import extract_project_dtm
+
+        if cls is DTMProvider:
+            resolved_provider_code = provider_code
+        else:
+            resolved_provider_code = cls.code()
+        return extract_project_dtm(
+            center=center,
+            width_m=width_m,
+            height_m=height_m,
+            rotation_deg=rotation_deg,
+            provider_code=resolved_provider_code,
+            fallback_provider_code=fallback_provider_code,
+            user_settings=user_settings,
+            fallback_user_settings=fallback_user_settings,
+            directory=directory,
+            logger=logger,
+            min_valid_coverage=min_valid_coverage,
+            source_buffer_m=source_buffer_m,
+            output_basename=output_basename,
+            max_edge=max_edge,
+            max_pixels=max_pixels,
+            target_resolution_m=target_resolution_m,
+            destination_crs=destination_crs,
+            resampling=resampling,
+        )
+
     @property
     def image(self) -> np.ndarray:
         """Get numpy array of the tile and check if it contains any data.

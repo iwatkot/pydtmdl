@@ -212,6 +212,86 @@ def extract_area_from_dtm(
     )
 
 
+def extract_project_dtm_from_file(
+    image_path: str,
+    center: tuple[float, float],
+    width_m: int,
+    height_m: int | None = None,
+    rotation_deg: float = 0.0,
+    directory: str = os.path.join(os.getcwd(), "tiles"),
+    logger: Any = logging.getLogger(__name__),
+    min_valid_coverage: float | None = None,
+    source_buffer_m: float | None = None,
+    output_basename: str = "dtm",
+    max_edge: int = 8192,
+    max_pixels: int | None = None,
+    target_resolution_m: float | None = None,
+    destination_crs: str = "auto-utm",
+    resampling: str = "bilinear",
+):
+    """Generate full and preview DTM PNG assets from a local GeoTIFF."""
+    from pydtmdl.assets import extract_project_dtm_from_file as _extract_project_dtm_from_file
+
+    return _extract_project_dtm_from_file(
+        image_path=image_path,
+        center=center,
+        width_m=width_m,
+        height_m=height_m,
+        rotation_deg=rotation_deg,
+        directory=directory,
+        logger=logger,
+        min_valid_coverage=min_valid_coverage,
+        source_buffer_m=source_buffer_m,
+        output_basename=output_basename,
+        max_edge=max_edge,
+        max_pixels=max_pixels,
+        target_resolution_m=target_resolution_m,
+        destination_crs=destination_crs,
+        resampling=resampling,
+    )
+
+
+def extract_project_imagery_from_file(
+    image_path: str,
+    center: tuple[float, float],
+    width_m: int,
+    height_m: int | None = None,
+    rotation_deg: float = 0.0,
+    directory: str = os.path.join(os.getcwd(), "tiles"),
+    logger: Any = logging.getLogger(__name__),
+    source_buffer_m: float | None = None,
+    output_basename: str = "imagery",
+    max_edge: int = 8192,
+    max_pixels: int | None = None,
+    target_resolution_m: float | None = None,
+    destination_crs: str = "auto-utm",
+    resampling: str = "bilinear",
+    jpeg_quality: int = 90,
+):
+    """Generate a capped imagery JPEG preview from a local GeoTIFF."""
+    from pydtmdl.assets import (
+        extract_project_imagery_from_file as _extract_project_imagery_from_file,
+    )
+
+    return _extract_project_imagery_from_file(
+        image_path=image_path,
+        center=center,
+        width_m=width_m,
+        height_m=height_m,
+        rotation_deg=rotation_deg,
+        directory=directory,
+        logger=logger,
+        source_buffer_m=source_buffer_m,
+        output_basename=output_basename,
+        max_edge=max_edge,
+        max_pixels=max_pixels,
+        target_resolution_m=target_resolution_m,
+        destination_crs=destination_crs,
+        resampling=resampling,
+        jpeg_quality=jpeg_quality,
+    )
+
+
 def extract_area_from_image(
     image_path: str,
     center: tuple[float, float],

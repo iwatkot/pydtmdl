@@ -27,6 +27,15 @@ from pydtmdl.base.local_raster import (
     extract_area_from_dtm,
     extract_area_from_image,
     extract_area_from_imagery,
+    extract_project_dtm_from_file,
+    extract_project_imagery_from_file,
+)
+from pydtmdl.assets import (
+    DTMAssetResult,
+    ImageryAssetResult,
+    SourceManifest,
+    extract_project_dtm,
+    extract_project_imagery,
 )
 from pydtmdl.postprocess import (
     PngExportMetadata,
