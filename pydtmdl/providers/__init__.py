@@ -17,7 +17,6 @@ from pydtmdl.providers.japan import JapanGSIProvider
 from pydtmdl.providers.lithuania import LithuaniaProvider
 from pydtmdl.providers.mv import MecklenburgVorpommernProvider
 from pydtmdl.providers.niedersachsen import NiedersachsenProvider
-from pydtmdl.providers.netherlands import NetherlandsAHN4Provider
 from pydtmdl.providers.norway import NorwayProvider
 from pydtmdl.providers.nrw import NRWProvider
 from pydtmdl.providers.poland import PolandDTM1MProvider

@@ -30,7 +30,6 @@ COORDINATE_CASES = {
     "italy": (42.0, 12.5),  # Rome area, Italy
     "japan_gsi": (35.6812, 139.7671),  # Tokyo area, Japan
     "lithuania": (55.0, 24.0),  # Vilnius area, Lithuania
-    "netherlands_ahn4": (52.3676, 4.9041),  # Amsterdam area, Netherlands
     # "niedersachsen": (52.5, 9.5),  # Hannover area, Germany # ! Not working!
     "norway": (60.0, 10.0),  # Oslo area, Norway
     "NRW": (51.5, 7.5),  # Dortmund area, Germany
