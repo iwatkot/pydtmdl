@@ -6,6 +6,7 @@ from pydtmdl.imagery_providers.europe import (
     LuxembourgOrthophotoImageryProvider,
     NetherlandsPDOKImageryProvider,
     SpainPNOAImageryProvider,
+    WalloniaOrthophotoImageryProvider,
 )
 from pydtmdl.imagery_providers.germany import (
     BavariaImageryProvider,

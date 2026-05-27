@@ -12,7 +12,7 @@ Scope used for this pass:
 
 Already implemented DTM providers in this repo: SRTM, USGS 3DEP WCS, Canada HRDEM, ArcticDEM, REMA Antarctica, Austria, Baden-Wurttemberg, Bavaria, Czechia, Czech DMR5G, Denmark, England, Finland, Flanders, France, Hessen, Italy, Lithuania, Mecklenburg-Vorpommern, Lower Saxony, Netherlands AHN4, Norway, NRW, Poland, Sachsen-Anhalt, Scotland, Spain, Sweden, Switzerland, Thuringia, Wales.
 
-Already implemented imagery providers in this repo: Sentinel-2 L2A, NAIP, Austria basemap orthophoto, France BD ORTHO, Spain PNOA, Netherlands PDOK high-resolution orthophoto, Luxembourg orthophoto, Copernicus VHR 2021, Germany NRW/Bavaria/Hessen/Lower Saxony/Thuringia DOP, Poland high-resolution orthophoto.
+Already implemented imagery providers in this repo: Sentinel-2 L2A, NAIP, Austria basemap orthophoto, France BD ORTHO, Spain PNOA, Netherlands PDOK high-resolution orthophoto, Luxembourg orthophoto, Copernicus VHR 2021, Germany NRW/Bavaria/Hessen/Lower Saxony/Thuringia DOP, Poland high-resolution orthophoto, Switzerland SWISSIMAGE, Wallonia orthophoto.
 
 ## Strong candidates
 
@@ -115,26 +115,6 @@ Already implemented imagery providers in this repo: Sentinel-2 L2A, NAIP, Austri
 - License: GSI website content is under Japan Public Data License 1.0 unless otherwise stated.
 - Source: [GSI elevation sample/program page](https://maps.gsi.go.jp/development/elevation.html), [GSI Website Terms of Use](https://www.gsi.go.jp/ENGLISH/page_e30286.html), [GSI elevation data explanation PDF](https://cyberjapandata.gsi.go.jp/help/pdf/demapi.pdf).
 - Implementation notes: This is not ordinary RGB imagery. Elevation is encoded in PNG RGB values and must be decoded. A provider should request DEM1A first, then DEM5A/5B/5C/10B as fallback per tile.
-
-### Switzerland SWISSIMAGE
-
-- Type: Imagery.
-- Coverage: Switzerland.
-- Quality: official swisstopo orthophoto mosaic.
-- Access: WMS/WMTS geoservices; no authorization/license required under swisstopo OGD terms.
-- License: Open Government Data; free commercial use with source attribution.
-- Source: [swisstopo free geodata](https://shop.swisstopo.admin.ch/en/free-geodata), [swisstopo geoservices](https://www.swisstopo.admin.ch/en/geoservices-with-swisstopo-geodata), [WMTS documentation](https://docs.geo.admin.ch/visualize-data/wmts.html).
-- Implementation notes: DTM Switzerland already exists in the repo, but imagery does not. The direct WMTS layer `ch.swisstopo.swissimage` is likely the simplest path.
-
-### Wallonia orthophoto WMS
-
-- Type: Imagery.
-- Coverage: Wallonia, Belgium.
-- Quality: official orthophotography WMS.
-- Access: Public WMS, free access for the public.
-- License: SPW web-service terms; open/public access. Verify derivative/commercial reuse language before coding if downstream products are redistributed.
-- Source: [Wallonia orthophoto WMS service listing](https://directory.spatineo.com/service/88486/), [Wallonia geoportal](https://geoportail.wallonie.be/).
-- Implementation notes: Flanders DTM exists in the repo, but Wallonia imagery does not. This should fit the existing WMS imagery base class.
 
 ### Iceland 10 m DEM
 
