@@ -34,6 +34,7 @@ from pydtmdl.imagery_providers.sentinel2 import (
     Sentinel2L2AImageryProvider,
     Sentinel2L2AImagerySettings,
 )
+from pydtmdl.imagery_providers.switzerland import SwitzerlandSWISSIMAGEImageryProvider
 
 _IMAGERY_PROVIDER_COUNTER = count()
 
@@ -313,6 +314,7 @@ def test_european_imagery_providers_are_registered():
         "netherlands_luchtfoto_hr": NetherlandsPDOKImageryProvider,
         "luxembourg_orthophoto": LuxembourgOrthophotoImageryProvider,
         "copernicus_vhr_2021": CopernicusVHR2021ImageryProvider,
+        "switzerland_swissimage": SwitzerlandSWISSIMAGEImageryProvider,
     }
 
     for code, provider_class in expected.items():
@@ -404,6 +406,24 @@ def test_austria_wmts_tile_selection_contains_vienna(tmp_path: Path):
 
     assert tiles
     assert any(tile[3] <= x <= tile[5] and tile[4] <= y <= tile[6] for tile in tiles)
+
+
+def test_switzerland_swissimage_wmts_tile_selection_contains_bern(tmp_path: Path):
+    provider = SwitzerlandSWISSIMAGEImageryProvider(
+        coordinates=(46.948, 7.4474),
+        width_m=512,
+        height_m=512,
+        directory=str(tmp_path),
+    )
+
+    left, bottom, right, top = provider._get_projected_bbox()
+    tiles = provider._iter_required_tiles(left, bottom, right, top)
+    transformer = Transformer.from_crs("EPSG:4326", provider._source_crs, always_xy=True)
+    x, y = transformer.transform(7.4474, 46.948)
+
+    assert tiles
+    assert any(tile[3] <= x <= tile[5] and tile[4] <= y <= tile[6] for tile in tiles)
+    assert provider.get_tile_url(18, 91228, 136499).endswith("/18/136499/91228.jpeg")
 
 
 def test_imagery_provider_rejects_partial_valid_coverage(tmp_path: Path):
