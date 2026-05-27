@@ -13,6 +13,7 @@ from pydtmdl.providers.flanders import FlandersProvider
 from pydtmdl.providers.france import FranceProvider
 from pydtmdl.providers.hessen import HessenProvider
 from pydtmdl.providers.italy import ItalyProvider
+from pydtmdl.providers.japan import JapanGSIProvider
 from pydtmdl.providers.lithuania import LithuaniaProvider
 from pydtmdl.providers.mv import MecklenburgVorpommernProvider
 from pydtmdl.providers.niedersachsen import NiedersachsenProvider

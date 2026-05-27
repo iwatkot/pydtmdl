@@ -10,7 +10,7 @@ Scope used for this pass:
 - Not already implemented in this repository.
 - Not just a same-country/same-dataset enhancement of an existing provider. Imagery can still be listed for a country where only DTM exists, and vice versa.
 
-Already implemented DTM providers in this repo: SRTM, USGS 3DEP WCS, Canada HRDEM, ArcticDEM, REMA Antarctica, Austria, Baden-Wurttemberg, Bavaria, Czechia, Czech DMR5G, Denmark, England, Finland, Flanders, France, Hessen, Italy, Lithuania, Mecklenburg-Vorpommern, Lower Saxony, Netherlands AHN4, Norway, NRW, Poland, Sachsen-Anhalt, Scotland, Spain, Sweden, Switzerland, Thuringia, Wales.
+Already implemented DTM providers in this repo: SRTM, USGS 3DEP WCS, Canada HRDEM, ArcticDEM, REMA Antarctica, Austria, Baden-Wurttemberg, Bavaria, Czechia, Czech DMR5G, Denmark, England, Finland, Flanders, France, Hessen, Italy, Japan GSI DEM, Lithuania, Mecklenburg-Vorpommern, Lower Saxony, Netherlands AHN4, Norway, NRW, Poland, Sachsen-Anhalt, Scotland, Spain, Sweden, Switzerland, Thuringia, Wales.
 
 Already implemented imagery providers in this repo: Sentinel-2 L2A, NAIP, Austria basemap orthophoto, France BD ORTHO, Spain PNOA, Netherlands PDOK high-resolution orthophoto, Luxembourg orthophoto, Copernicus VHR 2021, Germany NRW/Bavaria/Hessen/Lower Saxony/Thuringia DOP, Poland high-resolution orthophoto, Switzerland SWISSIMAGE, Wallonia orthophoto.
 
@@ -105,16 +105,6 @@ Already implemented imagery providers in this repo: Sentinel-2 L2A, NAIP, Austri
 - License: Open government / CC BY style source licensing depending on custodian.
 - Source: [Geoscience Australia Digital Elevation Data](https://www.ga.gov.au/scientific-topics/national-location-information/digital-elevation-data), [ELVIS download guide](https://lidarvisor.com/download-elvis-australia/).
 - Implementation notes: Treat as a coverage-indexed provider, not a simple country-wide raster. The 5 m catchment mosaics may be easier than individual LiDAR project products.
-
-### Japan GSI elevation tiles
-
-- Type: DEM/elevation.
-- Coverage: Japan.
-- Quality: DEM1A, DEM5A, DEM5B, DEM5C, DEM10B tile hierarchy; 1 m/5 m products are not everywhere, DEM10B is broad fallback within Japan.
-- Access: Public XYZ PNG elevation tiles, no auth.
-- License: GSI website content is under Japan Public Data License 1.0 unless otherwise stated.
-- Source: [GSI elevation sample/program page](https://maps.gsi.go.jp/development/elevation.html), [GSI Website Terms of Use](https://www.gsi.go.jp/ENGLISH/page_e30286.html), [GSI elevation data explanation PDF](https://cyberjapandata.gsi.go.jp/help/pdf/demapi.pdf).
-- Implementation notes: This is not ordinary RGB imagery. Elevation is encoded in PNG RGB values and must be decoded. A provider should request DEM1A first, then DEM5A/5B/5C/10B as fallback per tile.
 
 ### Iceland 10 m DEM
 
