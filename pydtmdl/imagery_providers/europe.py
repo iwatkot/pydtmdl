@@ -171,3 +171,21 @@ class CopernicusVHR2021ImageryProvider(EuropeanWMSImageryProvider):
     _source_crs = "EPSG:3035"
     _image_format = "image/tiff"
     _layer = "VHR_2021_LAEA"
+
+
+class WalloniaOrthophotoImageryProvider(EuropeanWMSImageryProvider):
+    """Wallonia latest public orthophoto imagery."""
+
+    _code = "wallonia_orthophoto"
+    _name = "Wallonia orthophoto"
+    _region = "BE"
+    _icon = "BE"
+    _resolution = 0.25
+    _dataset = "be-wallonia-ortho-last"
+    _extents = [(50.85, 49.45, 6.42, 2.75)]
+
+    _url = "https://geoservices.wallonie.be/arcgis/services/IMAGERIE/ORTHO_LAST/MapServer/WMSServer"
+    _source_crs = "EPSG:3857"
+    _tile_pixels = 2048
+    _image_format = "image/jpeg"
+    _layer = "0"

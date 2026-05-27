@@ -21,6 +21,7 @@ from pydtmdl.imagery_providers.europe import (
     LuxembourgOrthophotoImageryProvider,
     NetherlandsPDOKImageryProvider,
     SpainPNOAImageryProvider,
+    WalloniaOrthophotoImageryProvider,
 )
 from pydtmdl.imagery_providers.germany import (
     BavariaImageryProvider,
@@ -34,6 +35,7 @@ from pydtmdl.imagery_providers.sentinel2 import (
     Sentinel2L2AImageryProvider,
     Sentinel2L2AImagerySettings,
 )
+from pydtmdl.imagery_providers.switzerland import SwitzerlandSWISSIMAGEImageryProvider
 
 _IMAGERY_PROVIDER_COUNTER = count()
 
@@ -313,6 +315,8 @@ def test_european_imagery_providers_are_registered():
         "netherlands_luchtfoto_hr": NetherlandsPDOKImageryProvider,
         "luxembourg_orthophoto": LuxembourgOrthophotoImageryProvider,
         "copernicus_vhr_2021": CopernicusVHR2021ImageryProvider,
+        "switzerland_swissimage": SwitzerlandSWISSIMAGEImageryProvider,
+        "wallonia_orthophoto": WalloniaOrthophotoImageryProvider,
     }
 
     for code, provider_class in expected.items():
@@ -356,6 +360,28 @@ def test_european_wms_provider_georeferences_jpeg_bytes_in_xy_order(tmp_path: Pa
             assert dataset.bounds.bottom == pytest.approx(tile[1])
             assert dataset.bounds.right == pytest.approx(tile[2])
             assert dataset.bounds.top == pytest.approx(tile[3])
+
+
+def test_wallonia_orthophoto_builds_expected_wms_parameters(tmp_path: Path):
+    provider = WalloniaOrthophotoImageryProvider(
+        coordinates=(50.467, 4.867),
+        width_m=512,
+        height_m=512,
+        directory=str(tmp_path),
+    )
+
+    bbox = provider._transform_bbox_to_source_crs(provider.get_bbox())
+    transformer = Transformer.from_crs("EPSG:4326", provider._source_crs, always_xy=True)
+    x, y = transformer.transform(4.867, 50.467)
+    params = provider.get_wms_parameters((100.0, 200.0, 300.0, 400.0))
+
+    assert bbox[3] < x < bbox[2]
+    assert bbox[0] < y < bbox[1]
+    assert params["layers"] == ["0"]
+    assert params["srs"] == "EPSG:3857"
+    assert params["bbox"] == (100.0, 200.0, 300.0, 400.0)
+    assert params["size"] == (2048, 2048)
+    assert params["format"] == "image/jpeg"
 
 
 def test_wmts_imagery_provider_georeferences_tile_bounds(tmp_path: Path):
@@ -404,6 +430,24 @@ def test_austria_wmts_tile_selection_contains_vienna(tmp_path: Path):
 
     assert tiles
     assert any(tile[3] <= x <= tile[5] and tile[4] <= y <= tile[6] for tile in tiles)
+
+
+def test_switzerland_swissimage_wmts_tile_selection_contains_bern(tmp_path: Path):
+    provider = SwitzerlandSWISSIMAGEImageryProvider(
+        coordinates=(46.948, 7.4474),
+        width_m=512,
+        height_m=512,
+        directory=str(tmp_path),
+    )
+
+    left, bottom, right, top = provider._get_projected_bbox()
+    tiles = provider._iter_required_tiles(left, bottom, right, top)
+    transformer = Transformer.from_crs("EPSG:4326", provider._source_crs, always_xy=True)
+    x, y = transformer.transform(7.4474, 46.948)
+
+    assert tiles
+    assert any(tile[3] <= x <= tile[5] and tile[4] <= y <= tile[6] for tile in tiles)
+    assert provider.get_tile_url(18, 91228, 136499).endswith("/18/136499/91228.jpeg")
 
 
 def test_imagery_provider_rejects_partial_valid_coverage(tmp_path: Path):
