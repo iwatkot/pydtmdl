@@ -776,6 +776,7 @@ class DTMProvider(ABC):
         target_resolution_m: float | None = None,
         destination_crs: str = "auto-utm",
         resampling: str = "bilinear",
+        cleanup_temp_files: bool = False,
     ) -> Any:
         """Generate application-ready DTM PNG assets for a project."""
         from pydtmdl.assets import extract_project_dtm
@@ -803,6 +804,7 @@ class DTMProvider(ABC):
             target_resolution_m=target_resolution_m,
             destination_crs=destination_crs,
             resampling=resampling,
+            cleanup_temp_files=cleanup_temp_files,
         )
 
     @property

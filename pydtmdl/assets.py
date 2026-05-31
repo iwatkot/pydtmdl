@@ -484,6 +484,19 @@ def _prepare_provider_source(
     return prepared, source_files, False
 
 
+def _provider_temp_paths(provider: DTMProvider) -> tuple[str, str]:
+    cache_path = Path(provider.cache_path)
+    return (str(cache_path / "merged.tif"), str(cache_path / "reprojected.tif"))
+
+
+def _cleanup_temp_files(paths: list[str]) -> None:
+    for path in {candidate for candidate in paths if candidate}:
+        try:
+            Path(path).unlink()
+        except FileNotFoundError:
+            continue
+
+
 def _extract_project_dtm_with_provider(
     provider: DTMProvider,
     *,
@@ -506,6 +519,7 @@ def _extract_project_dtm_with_provider(
     target_resolution_m: float | None,
     destination_crs: str,
     resampling: str,
+    cleanup_temp_files: bool,
 ) -> DTMAssetResult:
     source_path, source_files, cache_hit = _prepare_provider_source(provider)
     source_resolution = target_resolution_m or provider.resolution() or 1.0
@@ -547,81 +561,86 @@ def _extract_project_dtm_with_provider(
     full_png = str(asset_dir / f"{output_basename}-full.png")
     preview_png = str(asset_dir / f"{output_basename}-preview.png")
     resolved_resampling = _resampling(resampling)
+    temp_paths = [*_provider_temp_paths(provider), full_tiff, preview_tiff]
 
-    _reproject_to_temp_tiff(
-        source_path=source_path,
-        output_path=full_tiff,
-        grid=full_grid,
-        band_indexes=[1],
-        dtype="float32",
-        resampling=resolved_resampling,
-    )
-    height_min, height_max = _scan_min_max(full_tiff)
-    _write_normalized_png(
-        source_path=full_tiff,
-        output_path=full_png,
-        height_min=height_min,
-        height_max=height_max,
-    )
-    if preview_width == full_width and preview_height == full_height:
-        preview_png = full_png
-    else:
+    try:
         _reproject_to_temp_tiff(
             source_path=source_path,
-            output_path=preview_tiff,
-            grid=preview_grid,
+            output_path=full_tiff,
+            grid=full_grid,
             band_indexes=[1],
             dtype="float32",
             resampling=resolved_resampling,
         )
+        height_min, height_max = _scan_min_max(full_tiff)
         _write_normalized_png(
-            source_path=preview_tiff,
-            output_path=preview_png,
+            source_path=full_tiff,
+            output_path=full_png,
             height_min=height_min,
             height_max=height_max,
         )
-    manifest = _source_manifest(
-        provider=provider,
-        fallback_provider_code=fallback_provider_code,
-        center=center,
-        width_m=width_m,
-        height_m=height_m,
-        source_width_m=source_width_m,
-        source_height_m=source_height_m,
-        source_buffer_m=source_buffer_m,
-        rotation_deg=rotation_deg,
-        source_files=source_files,
-    )
-    return DTMAssetResult(
-        requested_provider=requested_provider_code,
-        requested_provider_name=requested_provider_name,
-        actual_provider=provider.code() or "unknown",
-        actual_provider_name=provider.name(),
-        fallback_used=fallback_used,
-        primary_failure_reason=primary_failure,
-        preview_output_path=preview_png,
-        preview_shape=(preview_height, preview_width),
-        preview_resolution=preview_resolution,
-        full_output_path=full_png,
-        full_shape=(full_height, full_width),
-        full_resolution=full_resolution,
-        processed_output_crs=full_grid.crs.to_string(),
-        min=height_min,
-        max=height_max,
-        source_resolution=provider.resolution(),
-        source_width_m=source_width_m,
-        source_height_m=source_height_m,
-        source_buffer_m=source_buffer_m,
-        source_files=source_files,
-        source_manifest=manifest,
-        center=center,
-        width_m=width_m,
-        height_m=height_m,
-        rotation_deg=rotation_deg,
-        cache_hit=cache_hit,
-        cache_key=provider.cache_key,
-        cache_path=provider.cache_path,
-    )
+        if preview_width == full_width and preview_height == full_height:
+            preview_png = full_png
+        else:
+            _reproject_to_temp_tiff(
+                source_path=source_path,
+                output_path=preview_tiff,
+                grid=preview_grid,
+                band_indexes=[1],
+                dtype="float32",
+                resampling=resolved_resampling,
+            )
+            _write_normalized_png(
+                source_path=preview_tiff,
+                output_path=preview_png,
+                height_min=height_min,
+                height_max=height_max,
+            )
+        manifest = _source_manifest(
+            provider=provider,
+            fallback_provider_code=fallback_provider_code,
+            center=center,
+            width_m=width_m,
+            height_m=height_m,
+            source_width_m=source_width_m,
+            source_height_m=source_height_m,
+            source_buffer_m=source_buffer_m,
+            rotation_deg=rotation_deg,
+            source_files=source_files,
+        )
+        return DTMAssetResult(
+            requested_provider=requested_provider_code,
+            requested_provider_name=requested_provider_name,
+            actual_provider=provider.code() or "unknown",
+            actual_provider_name=provider.name(),
+            fallback_used=fallback_used,
+            primary_failure_reason=primary_failure,
+            preview_output_path=preview_png,
+            preview_shape=(preview_height, preview_width),
+            preview_resolution=preview_resolution,
+            full_output_path=full_png,
+            full_shape=(full_height, full_width),
+            full_resolution=full_resolution,
+            processed_output_crs=full_grid.crs.to_string(),
+            min=height_min,
+            max=height_max,
+            source_resolution=provider.resolution(),
+            source_width_m=source_width_m,
+            source_height_m=source_height_m,
+            source_buffer_m=source_buffer_m,
+            source_files=source_files,
+            source_manifest=manifest,
+            center=center,
+            width_m=width_m,
+            height_m=height_m,
+            rotation_deg=rotation_deg,
+            cache_hit=cache_hit,
+            cache_key=provider.cache_key,
+            cache_path=provider.cache_path,
+        )
+    finally:
+        if cleanup_temp_files:
+            _cleanup_temp_files(temp_paths)
 
 
 def _extract_project_imagery_with_provider(
@@ -646,6 +665,7 @@ def _extract_project_imagery_with_provider(
     destination_crs: str,
     resampling: str,
     jpeg_quality: int,
+    cleanup_temp_files: bool,
 ) -> ImageryAssetResult:
     source_path, source_files, cache_hit = _prepare_provider_source(provider)
     source_resolution = target_resolution_m or provider.resolution() or 1.0
@@ -668,54 +688,60 @@ def _extract_project_imagery_with_provider(
     asset_dir = Path(provider.cache_path) / "assets"
     preview_tiff = str(asset_dir / f"{output_basename}-preview.tmp.tif")
     preview_jpg = str(asset_dir / f"{output_basename}-preview.jpg")
-    with rasterio.open(source_path) as src:
-        band_indexes = list(range(1, min(src.count, 3) + 1))
-    _reproject_to_temp_tiff(
-        source_path=source_path,
-        output_path=preview_tiff,
-        grid=grid,
-        band_indexes=band_indexes,
-        dtype="float32",
-        resampling=_resampling(resampling),
-    )
-    _write_jpeg_preview(preview_tiff, preview_jpg, jpeg_quality)
-    manifest = _source_manifest(
-        provider=provider,
-        fallback_provider_code=fallback_provider_code,
-        center=center,
-        width_m=width_m,
-        height_m=height_m,
-        source_width_m=source_width_m,
-        source_height_m=source_height_m,
-        source_buffer_m=source_buffer_m,
-        rotation_deg=rotation_deg,
-        source_files=source_files,
-    )
-    return ImageryAssetResult(
-        requested_provider=requested_provider_code,
-        requested_provider_name=requested_provider_name,
-        actual_provider=provider.code() or "unknown",
-        actual_provider_name=provider.name(),
-        fallback_used=fallback_used,
-        primary_failure_reason=primary_failure,
-        preview_output_path=preview_jpg,
-        preview_shape=(preview_height, preview_width),
-        preview_resolution=preview_resolution,
-        processed_output_crs=grid.crs.to_string(),
-        source_resolution=provider.resolution(),
-        source_width_m=source_width_m,
-        source_height_m=source_height_m,
-        source_buffer_m=source_buffer_m,
-        source_files=source_files,
-        source_manifest=manifest,
-        center=center,
-        width_m=width_m,
-        height_m=height_m,
-        rotation_deg=rotation_deg,
-        cache_hit=cache_hit,
-        cache_key=provider.cache_key,
-        cache_path=provider.cache_path,
-    )
+    temp_paths = [*_provider_temp_paths(provider), preview_tiff]
+
+    try:
+        with rasterio.open(source_path) as src:
+            band_indexes = list(range(1, min(src.count, 3) + 1))
+        _reproject_to_temp_tiff(
+            source_path=source_path,
+            output_path=preview_tiff,
+            grid=grid,
+            band_indexes=band_indexes,
+            dtype="float32",
+            resampling=_resampling(resampling),
+        )
+        _write_jpeg_preview(preview_tiff, preview_jpg, jpeg_quality)
+        manifest = _source_manifest(
+            provider=provider,
+            fallback_provider_code=fallback_provider_code,
+            center=center,
+            width_m=width_m,
+            height_m=height_m,
+            source_width_m=source_width_m,
+            source_height_m=source_height_m,
+            source_buffer_m=source_buffer_m,
+            rotation_deg=rotation_deg,
+            source_files=source_files,
+        )
+        return ImageryAssetResult(
+            requested_provider=requested_provider_code,
+            requested_provider_name=requested_provider_name,
+            actual_provider=provider.code() or "unknown",
+            actual_provider_name=provider.name(),
+            fallback_used=fallback_used,
+            primary_failure_reason=primary_failure,
+            preview_output_path=preview_jpg,
+            preview_shape=(preview_height, preview_width),
+            preview_resolution=preview_resolution,
+            processed_output_crs=grid.crs.to_string(),
+            source_resolution=provider.resolution(),
+            source_width_m=source_width_m,
+            source_height_m=source_height_m,
+            source_buffer_m=source_buffer_m,
+            source_files=source_files,
+            source_manifest=manifest,
+            center=center,
+            width_m=width_m,
+            height_m=height_m,
+            rotation_deg=rotation_deg,
+            cache_hit=cache_hit,
+            cache_key=provider.cache_key,
+            cache_path=provider.cache_path,
+        )
+    finally:
+        if cleanup_temp_files:
+            _cleanup_temp_files(temp_paths)
 
 
 def extract_project_dtm(
@@ -738,6 +764,7 @@ def extract_project_dtm(
     target_resolution_m: float | None = None,
     destination_crs: str = "auto-utm",
     resampling: str = "bilinear",
+    cleanup_temp_files: bool = False,
 ) -> DTMAssetResult:
     """Generate full and editor-preview DTM PNG assets for a project."""
     resolved_height = height_m if height_m is not None else width_m
@@ -787,6 +814,7 @@ def extract_project_dtm(
             target_resolution_m=target_resolution_m,
             destination_crs=destination_crs,
             resampling=resampling,
+            cleanup_temp_files=cleanup_temp_files,
         )
     except DTMProviderError as primary_error:
         if not fallback_provider_code:
@@ -829,6 +857,7 @@ def extract_project_dtm(
             target_resolution_m=target_resolution_m,
             destination_crs=destination_crs,
             resampling=resampling,
+            cleanup_temp_files=cleanup_temp_files,
         )
 
 
@@ -855,6 +884,7 @@ def extract_project_imagery(
     destination_crs: str = "auto-utm",
     resampling: str = "bilinear",
     jpeg_quality: int = 90,
+    cleanup_temp_files: bool = False,
 ) -> ImageryAssetResult:
     """Generate an editor-preview imagery JPEG asset for a project."""
     resolved_height = height_m if height_m is not None else width_m
@@ -905,6 +935,7 @@ def extract_project_imagery(
             destination_crs=destination_crs,
             resampling=resampling,
             jpeg_quality=jpeg_quality,
+            cleanup_temp_files=cleanup_temp_files,
         )
     except DTMProviderError as primary_error:
         if not fallback_provider_code:
@@ -949,6 +980,7 @@ def extract_project_imagery(
             destination_crs=destination_crs,
             resampling=resampling,
             jpeg_quality=jpeg_quality,
+            cleanup_temp_files=cleanup_temp_files,
         )
 
 
@@ -969,6 +1001,7 @@ def extract_project_dtm_from_file(
     target_resolution_m: float | None = None,
     destination_crs: str = "auto-utm",
     resampling: str = "bilinear",
+    cleanup_temp_files: bool = False,
 ) -> DTMAssetResult:
     """Generate DTM PNG assets from a user-provided GeoTIFF source."""
     source_path = os.path.abspath(image_path)
@@ -989,6 +1022,7 @@ def extract_project_dtm_from_file(
         target_resolution_m=target_resolution_m,
         destination_crs=destination_crs,
         resampling=resampling,
+        cleanup_temp_files=cleanup_temp_files,
     )
 
 
@@ -1010,6 +1044,7 @@ def _extract_project_dtm_from_class(
     target_resolution_m: float | None,
     destination_crs: str,
     resampling: str,
+    cleanup_temp_files: bool,
 ) -> DTMAssetResult:
     if not os.path.isfile(source_path):
         raise FileNotFoundError(f"Raster file not found: {source_path}")
@@ -1049,6 +1084,7 @@ def _extract_project_dtm_from_class(
         target_resolution_m=target_resolution_m,
         destination_crs=destination_crs,
         resampling=resampling,
+        cleanup_temp_files=cleanup_temp_files,
     )
 
 
@@ -1069,6 +1105,7 @@ def extract_project_imagery_from_file(
     destination_crs: str = "auto-utm",
     resampling: str = "bilinear",
     jpeg_quality: int = 90,
+    cleanup_temp_files: bool = False,
 ) -> ImageryAssetResult:
     """Generate a capped JPEG imagery preview from a user-provided GeoTIFF source."""
     source_path = os.path.abspath(image_path)
@@ -1110,4 +1147,5 @@ def extract_project_imagery_from_file(
         destination_crs=destination_crs,
         resampling=resampling,
         jpeg_quality=jpeg_quality,
+        cleanup_temp_files=cleanup_temp_files,
     )

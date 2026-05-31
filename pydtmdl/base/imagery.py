@@ -229,6 +229,7 @@ class ImageryProvider(DTMProvider):
         destination_crs: str = "auto-utm",
         resampling: str = "bilinear",
         jpeg_quality: int = 90,
+        cleanup_temp_files: bool = False,
     ) -> Any:
         """Generate an application-ready capped JPEG preview from a local raster."""
         from pydtmdl.assets import extract_project_imagery_from_file
@@ -249,6 +250,7 @@ class ImageryProvider(DTMProvider):
             destination_crs=destination_crs,
             resampling=resampling,
             jpeg_quality=jpeg_quality,
+            cleanup_temp_files=cleanup_temp_files,
         )
 
     @classmethod
@@ -276,6 +278,7 @@ class ImageryProvider(DTMProvider):
         destination_crs: str = "auto-utm",
         resampling: str = "bilinear",
         jpeg_quality: int = 90,
+        cleanup_temp_files: bool = False,
     ) -> Any:
         """Generate an application-ready capped JPEG preview for a project."""
         from pydtmdl.assets import extract_project_imagery
@@ -306,6 +309,7 @@ class ImageryProvider(DTMProvider):
             destination_crs=destination_crs,
             resampling=resampling,
             jpeg_quality=jpeg_quality,
+            cleanup_temp_files=cleanup_temp_files,
         )
 
     def _resample_rotated_roi(self, tile_path: str) -> tuple[np.ma.MaskedArray, dict[str, Any]]:

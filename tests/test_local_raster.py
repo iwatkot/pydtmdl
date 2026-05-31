@@ -1,13 +1,20 @@
 from __future__ import annotations
 
+from itertools import count
 from pathlib import Path
 
 import numpy as np
 import rasterio
 from rasterio.transform import from_bounds
 
-from pydtmdl import extract_area_from_dtm, extract_area_from_image, extract_area_from_imagery
-from pydtmdl import extract_project_dtm_from_file, extract_project_imagery_from_file
+from pydtmdl import DTMProvider, extract_area_from_dtm, extract_area_from_image, extract_area_from_imagery
+from pydtmdl import extract_project_dtm, extract_project_dtm_from_file, extract_project_imagery_from_file
+
+_PROVIDER_COUNTER = count()
+
+
+def _next_provider_code(prefix: str) -> str:
+    return f"{prefix}_{next(_PROVIDER_COUNTER)}"
 
 
 def _write_single_band_raster(path: Path) -> Path:
@@ -48,6 +55,30 @@ def _write_rgb_raster(path: Path) -> Path:
         nodata=0,
     ) as dataset:
         dataset.write(data)
+    return path
+
+
+def _write_single_band_raster_with_bounds(
+    path: Path,
+    *,
+    bounds: tuple[float, float, float, float],
+    crs: str,
+) -> Path:
+    data = np.arange(200 * 200, dtype=np.float32).reshape(200, 200)
+    transform = from_bounds(*bounds, 200, 200)
+    with rasterio.open(
+        path,
+        "w",
+        driver="GTiff",
+        height=200,
+        width=200,
+        count=1,
+        dtype=data.dtype,
+        crs=crs,
+        transform=transform,
+        nodata=-9999.0,
+    ) as dataset:
+        dataset.write(data, 1)
     return path
 
 
@@ -187,3 +218,76 @@ def test_extract_project_imagery_from_file_writes_capped_jpeg(tmp_path: Path):
         assert src.driver == "JPEG"
         assert src.count == 3
         assert src.dtypes[0] == "uint8"
+
+
+def test_extract_project_imagery_from_file_cleanup_temp_files_removes_preview_tiff(tmp_path: Path):
+    source_path = _write_rgb_raster(tmp_path / "project_rgb_cleanup.tif")
+
+    result = extract_project_imagery_from_file(
+        image_path=str(source_path),
+        center=(0.0, 0.0),
+        width_m=1000,
+        height_m=500,
+        directory=str(tmp_path),
+        source_buffer_m=128,
+        max_edge=50,
+        target_resolution_m=5,
+        cleanup_temp_files=True,
+    )
+
+    assert Path(result.preview_output_path).exists()
+    assert not (Path(result.cache_path) / "assets" / "imagery-preview.tmp.tif").exists()
+
+
+def test_extract_project_dtm_cleanup_temp_files_removes_intermediates_only(tmp_path: Path):
+    provider_code = _next_provider_code("cleanup")
+    source_tiles: list[Path] = []
+
+    class CleanupProvider(DTMProvider):
+        _code = provider_code
+        _name = f"Cleanup {provider_code}"
+        _region = "Test"
+        _icon = "T"
+        _resolution = 10.0
+        _extents = [(1.0, -1.0, 1.0, -1.0)]
+        _output_crs = "EPSG:4326"
+
+        def download_tiles(self) -> list[str]:
+            if not source_tiles:
+                source_tiles.extend(
+                    [
+                        _write_single_band_raster_with_bounds(
+                            Path(self._source_tile_directory) / "tile_left.tif",
+                            bounds=(-2000.0, -1500.0, 0.0, 1500.0),
+                            crs="EPSG:3857",
+                        ),
+                        _write_single_band_raster_with_bounds(
+                            Path(self._source_tile_directory) / "tile_right.tif",
+                            bounds=(0.0, -1500.0, 2000.0, 1500.0),
+                            crs="EPSG:3857",
+                        ),
+                    ]
+                )
+            return [str(path) for path in source_tiles]
+
+    result = extract_project_dtm(
+        center=(0.0, 0.0),
+        width_m=1000,
+        height_m=1000,
+        provider_code=provider_code,
+        directory=str(tmp_path),
+        source_buffer_m=0,
+        max_edge=64,
+        target_resolution_m=10,
+        cleanup_temp_files=True,
+    )
+
+    cache_path = Path(result.cache_path)
+
+    assert Path(result.full_output_path).exists()
+    assert Path(result.preview_output_path).exists()
+    assert all(path.exists() for path in source_tiles)
+    assert not (cache_path / "merged.tif").exists()
+    assert not (cache_path / "reprojected.tif").exists()
+    assert not (cache_path / "assets" / "dtm-full.tmp.tif").exists()
+    assert not (cache_path / "assets" / "dtm-preview.tmp.tif").exists()

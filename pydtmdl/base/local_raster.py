@@ -228,6 +228,7 @@ def extract_project_dtm_from_file(
     target_resolution_m: float | None = None,
     destination_crs: str = "auto-utm",
     resampling: str = "bilinear",
+    cleanup_temp_files: bool = False,
 ):
     """Generate full and preview DTM PNG assets from a local GeoTIFF."""
     from pydtmdl.assets import extract_project_dtm_from_file as _extract_project_dtm_from_file
@@ -248,6 +249,7 @@ def extract_project_dtm_from_file(
         target_resolution_m=target_resolution_m,
         destination_crs=destination_crs,
         resampling=resampling,
+        cleanup_temp_files=cleanup_temp_files,
     )
 
 
@@ -267,6 +269,7 @@ def extract_project_imagery_from_file(
     destination_crs: str = "auto-utm",
     resampling: str = "bilinear",
     jpeg_quality: int = 90,
+    cleanup_temp_files: bool = False,
 ):
     """Generate a capped imagery JPEG preview from a local GeoTIFF."""
     from pydtmdl.assets import (
@@ -289,6 +292,7 @@ def extract_project_imagery_from_file(
         destination_crs=destination_crs,
         resampling=resampling,
         jpeg_quality=jpeg_quality,
+        cleanup_temp_files=cleanup_temp_files,
     )
 
 
