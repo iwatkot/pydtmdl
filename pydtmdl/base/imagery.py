@@ -69,7 +69,7 @@ class ImageryExtractionResult:
 class ImageryProvider(DTMProvider):
     """Base class for raster imagery providers."""
 
-    _cache_version: int = 1
+    _cache_version: int = 2
     _settings: Type[DTMProviderSettings] | None = ImageryProviderSettings
     _dataset: str | None = None
 

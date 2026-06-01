@@ -172,6 +172,7 @@ class DTMProvider(ABC):
     _max_retries: int = 5
     _retry_pause: int = 5
     _output_crs: str = "EPSG:4326"
+    _merge_mem_limit_mb: int = 64
 
     @classmethod
     def _is_imagery_provider_class(cls, provider: type[Any]) -> bool:
@@ -1301,22 +1302,26 @@ class DTMProvider(ABC):
             if has_mixed_crs:
                 self.logger.debug("Merge inputs have mixed CRS. Reprojecting to %s", crs)
 
-            mosaic, out_transform = merge(merged_sources, nodata=0)
-
-            out_meta = datasets[0].meta.copy()
-            out_meta.update(
+            dst_kwds = datasets[0].meta.copy()
+            dst_kwds.update(
                 {
                     "driver": "GTiff",
-                    "height": mosaic.shape[1],
-                    "width": mosaic.shape[2],
-                    "transform": out_transform,
-                    "count": mosaic.shape[0],
                     "crs": crs,
+                    "nodata": 0,
+                    "tiled": True,
+                    "blockxsize": 256,
+                    "blockysize": 256,
+                    "compress": "deflate",
+                    "BIGTIFF": "IF_SAFER",
                 }
             )
-
-            with rasterio.open(output_file, "w", **out_meta) as dest:
-                dest.write(mosaic)
+            merge(
+                merged_sources,
+                nodata=0,
+                mem_limit=self._merge_mem_limit_mb,
+                dst_path=output_file,
+                dst_kwds=dst_kwds,
+            )
 
         self.logger.debug("GeoTIFF images merged successfully into %s", output_file)
         return output_file, crs

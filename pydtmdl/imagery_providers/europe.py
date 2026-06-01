@@ -45,7 +45,7 @@ class EuropeanWMSImageryProvider(WMSImageryProvider):
             "layers": [self.layer()],
             self._wms_crs_parameter: self._source_crs,
             "bbox": tile,
-            "size": (self._tile_pixels, self._tile_pixels),
+            "size": self._wms_image_size(),
             "format": self._image_format,
             "transparent": False,
         }

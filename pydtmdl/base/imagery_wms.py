@@ -2,6 +2,7 @@
 
 import os
 from abc import abstractmethod
+from math import ceil
 from typing import Any
 
 import rasterio
@@ -48,10 +49,28 @@ class WMSImageryProvider(ImageryProvider):
                 return self._georeference_wms_image(image_bytes, tile)
             return image_bytes
 
-        files = self.download_tiles_with_fetcher(tiles, self.shared_tiff_path, wms_fetcher)
+        files = self.download_tiles_with_fetcher(
+            tiles,
+            self.shared_tiff_path,
+            wms_fetcher,
+            file_name_generator=self._tile_file_name,
+        )
         for file_path in files:
             self._ensure_tile_crs(file_path)
         return files
+
+    def _wms_image_size(self) -> tuple[int, int]:
+        """Return a tile image size capped by service limits and provider resolution."""
+        resolution = self.resolution()
+        if resolution is None or resolution <= 0:
+            pixels = self._tile_pixels
+        else:
+            pixels = min(self._tile_pixels, max(1, ceil(self._tile_size / resolution)))
+        return pixels, pixels
+
+    def _tile_file_name(self, tile: tuple[float, float, float, float]) -> str:
+        pixels, _ = self._wms_image_size()
+        return f"{'_'.join(map(str, tile))}_{pixels}px.tif"
 
     def _transform_bbox_to_source_crs(
         self,

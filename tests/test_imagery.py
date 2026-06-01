@@ -384,6 +384,20 @@ def test_wallonia_orthophoto_builds_expected_wms_parameters(tmp_path: Path):
     assert params["format"] == "image/jpeg"
 
 
+def test_copernicus_wms_tile_size_matches_advertised_resolution(tmp_path: Path):
+    provider = CopernicusVHR2021ImageryProvider(
+        coordinates=(45.2741, 20.2303),
+        width_m=20480,
+        height_m=20480,
+        directory=str(tmp_path),
+    )
+
+    params = provider.get_wms_parameters((100.0, 200.0, 1100.0, 1200.0))
+
+    assert params["size"] == (500, 500)
+    assert provider._tile_file_name((100.0, 200.0, 1100.0, 1200.0)).endswith("_500px.tif")
+
+
 def test_wmts_imagery_provider_georeferences_tile_bounds(tmp_path: Path):
     class TestWMTSImageryProvider(WMTSImageryProvider):
         _code = _next_imagery_code("wmts")

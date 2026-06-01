@@ -26,7 +26,7 @@ class PolandHighResolutionOrthophotoProvider(WMSImageryProvider):
             "layers": [self._layer],
             "srs": self._source_crs,
             "bbox": (tile[1], tile[0], tile[3], tile[2]),
-            "size": (self._tile_pixels, self._tile_pixels),
+            "size": self._wms_image_size(),
             "format": self._image_format,
             "transparent": False,
         }
