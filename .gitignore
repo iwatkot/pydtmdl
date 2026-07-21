@@ -7,3 +7,4 @@ output_roi.png
 output_satellite.png
 output_naip.png
 imagery_alignment_checks/
+live_checks/
