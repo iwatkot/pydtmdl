@@ -11,6 +11,7 @@ import json
 import shutil
 import subprocess
 import sys
+from argparse import ArgumentParser
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -27,16 +28,37 @@ from pydtmdl.imagery_providers.naip import NAIPImagerySettings
 MAPTOPLAY_ROOT = Path(r"C:\Coding\projectorbis")
 OSM_PREPARE_SCRIPT = MAPTOPLAY_ROOT / "apps" / "worker" / "scripts" / "run_osm_prepare.py"
 
-CASE = {
-    "name": "naip-osm-alignment-mississippi-river",
-    "provider_code": "naip",
-    "center": (35.92701060489532, -89.57458378845217),
-    "width_m": 4096,
-    "height_m": 4096,
-    "playable_width_m": 4096,
-    "playable_height_m": 4096,
-    "rotation_deg": 12.5,
-    "preview_max_edge": 1536,
+
+CASES: dict[str, dict[str, Any]] = {
+    "naip-mississippi-river": {
+        "name": "naip-osm-alignment-mississippi-river",
+        "provider_code": "naip",
+        "center": (35.92701060489532, -89.57458378845217),
+        "width_m": 4096,
+        "height_m": 4096,
+        "playable_width_m": 4096,
+        "playable_height_m": 4096,
+        "rotation_deg": 12.5,
+        "preview_max_edge": 1536,
+        "min_source_files": 2,
+        "provider_settings": {
+            "search_limit": 48,
+            "max_items": 8,
+            "date_from": "2021-07-22",
+        },
+    },
+    "copernicus-townsend-farm": {
+        "name": "copernicus-osm-alignment-townsend-farm",
+        "provider_code": "copernicus_vhr_2021",
+        "center": (51.68827703786368, -1.7481606214009844),
+        "width_m": 6144,
+        "height_m": 6144,
+        "playable_width_m": 2048,
+        "playable_height_m": 2048,
+        "rotation_deg": 0.0,
+        "preview_max_edge": 1536,
+        "min_source_files": 2,
+    },
 }
 
 
@@ -222,17 +244,37 @@ def draw_osm_overlay(
     return stats
 
 
-def run_osm_prepare(output_dir: Path) -> tuple[Path, dict[str, Any]]:
+def build_user_settings(case: dict[str, Any]) -> Any:
+    if case["provider_code"] == "naip":
+        settings = dict(case.get("provider_settings") or {})
+        settings.setdefault("date_to", datetime.now(UTC).date().isoformat())
+        return NAIPImagerySettings(**settings)
+    return None
+
+
+def parse_args() -> dict[str, Any]:
+    parser = ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--case",
+        choices=sorted(CASES),
+        default="naip-mississippi-river",
+        help="Alignment case to render.",
+    )
+    args = parser.parse_args()
+    return CASES[args.case]
+
+
+def run_osm_prepare(output_dir: Path, case: dict[str, Any]) -> tuple[Path, dict[str, Any]]:
     result_path = output_dir / "osm-result.json"
     payload = {
         "providerCode": "osm-api",
         "sourceMode": "provider",
-        "center": {"lat": CASE["center"][0], "lng": CASE["center"][1]},
-        "width": CASE["width_m"],
-        "height": CASE["height_m"],
-        "playableWidth": CASE["playable_width_m"],
-        "playableHeight": CASE["playable_height_m"],
-        "rotation": CASE["rotation_deg"],
+        "center": {"lat": case["center"][0], "lng": case["center"][1]},
+        "width": case["width_m"],
+        "height": case["height_m"],
+        "playableWidth": case["playable_width_m"],
+        "playableHeight": case["playable_height_m"],
+        "rotation": case["rotation_deg"],
         "outputDirectory": str(output_dir),
         "downloadTimeoutSeconds": 120,
         "downloadMarginMeters": 1024,
@@ -261,29 +303,26 @@ def run_osm_prepare(output_dir: Path) -> tuple[Path, dict[str, Any]]:
 
 
 def main() -> None:
+    case = parse_args()
+
     if not OSM_PREPARE_SCRIPT.exists():
         raise FileNotFoundError(f"MapToPlay OSM script not found: {OSM_PREPARE_SCRIPT}")
 
     stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
-    run_dir = REPO_ROOT / "imagery_alignment_checks" / f"{stamp}-{CASE['name']}"
+    run_dir = REPO_ROOT / "imagery_alignment_checks" / f"{stamp}-{case['name']}"
     imagery_cache_dir = run_dir / "pydtmdl-cache"
     osm_dir = run_dir / "osm"
     run_dir.mkdir(parents=True, exist_ok=True)
 
     imagery_result = extract_project_imagery(
-        center=CASE["center"],
-        width_m=CASE["width_m"],
-        height_m=CASE["height_m"],
-        rotation_deg=CASE["rotation_deg"],
-        provider_code=CASE["provider_code"],
-        user_settings=NAIPImagerySettings(
-            search_limit=48,
-            max_items=8,
-            date_from="2021-07-22",
-            date_to=datetime.now(UTC).date().isoformat(),
-        ),
+        center=case["center"],
+        width_m=case["width_m"],
+        height_m=case["height_m"],
+        rotation_deg=case["rotation_deg"],
+        provider_code=case["provider_code"],
+        user_settings=build_user_settings(case),
         directory=str(imagery_cache_dir),
-        max_edge=CASE["preview_max_edge"],
+        max_edge=case["preview_max_edge"],
         jpeg_quality=90,
         cleanup_temp_files=False,
     )
@@ -291,7 +330,7 @@ def main() -> None:
     preview_copy = run_dir / "01-pydtmdl-imagery-preview.jpg"
     shutil.copy2(imagery_result.preview_output_path, preview_copy)
 
-    osm_result_path, osm_result = run_osm_prepare(osm_dir)
+    osm_result_path, osm_result = run_osm_prepare(osm_dir, case)
     vector_path = Path(osm_result["derivedOutputPath"])
 
     overlay_stats = draw_osm_overlay(
@@ -299,19 +338,19 @@ def main() -> None:
         vector_path=vector_path,
         output_path=run_dir / "02-pydtmdl-imagery-with-maptoplay-osm-overlay.png",
         transparent_overlay_path=run_dir / "03-maptoplay-osm-overlay-transparent.png",
-        width_m=CASE["width_m"],
-        height_m=CASE["height_m"],
+        width_m=case["width_m"],
+        height_m=case["height_m"],
     )
 
     source_files = list(imagery_result.source_files)
-    if len(source_files) < 2:
+    if len(source_files) < case["min_source_files"]:
         raise RuntimeError(
             f"Validation imagery only rendered {len(source_files)} source file(s); "
             "choose a larger or different case."
         )
 
     summary = {
-        "case": CASE,
+        "case": case,
         "imagery": imagery_result.model_dump(),
         "imageryPreviewCopy": str(preview_copy),
         "sourceFileCount": len(source_files),

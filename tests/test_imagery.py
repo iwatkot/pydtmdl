@@ -137,6 +137,26 @@ def _make_rgb_jpeg_bytes() -> bytes:
         return memory_file.read()
 
 
+def _make_rgb_tiff_bytes() -> bytes:
+    data = np.zeros((3, 4, 4), dtype=np.uint8)
+    data[0, :, :] = 120
+    data[1, :, :] = 90
+    data[2, :, :] = 60
+
+    with MemoryFile() as memory_file:
+        with memory_file.open(
+            driver="GTiff",
+            width=4,
+            height=4,
+            count=3,
+            dtype=data.dtype,
+            crs="EPSG:4326",
+            transform=from_bounds(0.0, 0.0, 1.0, 1.0, 4, 4),
+        ) as dataset:
+            dataset.write(data)
+        return memory_file.read()
+
+
 def _write_scl_raster(path: Path) -> Path:
     return _write_scl_raster_with_bounds(path, bounds=(-0.05, -0.05, 0.05, 0.05), cloudy=True)
 
@@ -307,6 +327,84 @@ def test_tile_download_failure_threshold_aborts_provider(tmp_path: Path):
         )
 
 
+def test_download_tiles_with_fetcher_retries_empty_response(tmp_path: Path):
+    class RetryingWMSImageryProvider(WMSImageryProvider):
+        _code = _next_imagery_code("retrying_wms")
+        _name = "Retrying WMS"
+        _region = "Test"
+        _icon = "I"
+        _resolution = 1.0
+        _dataset = "test-retrying-wms"
+        _extents = [(1.0, -1.0, 1.0, -1.0)]
+        _url = "https://example.invalid/wms"
+        _max_retries = 2
+        _retry_pause = 0
+
+        def get_wms_parameters(self, tile: tuple[float, float, float, float]) -> dict:
+            return {}
+
+    provider = RetryingWMSImageryProvider(
+        coordinates=(0.0, 0.0),
+        width_m=1000,
+        height_m=1000,
+        directory=str(tmp_path),
+    )
+    calls = 0
+
+    def fetcher(_tile: tuple[float, float, float, float]) -> bytes:
+        nonlocal calls
+        calls += 1
+        return b"" if calls == 1 else _make_rgb_tiff_bytes()
+
+    files = provider.download_tiles_with_fetcher([(0.0, 0.0, 1.0, 1.0)], str(tmp_path), fetcher)
+
+    assert calls == 2
+    assert len(files) == 1
+    with rasterio.open(files[0]) as dataset:
+        assert dataset.width == 4
+        assert dataset.height == 4
+
+
+def test_download_tiles_with_fetcher_redownloads_invalid_cached_tile(tmp_path: Path):
+    class CachedWMSImageryProvider(WMSImageryProvider):
+        _code = _next_imagery_code("cached_wms")
+        _name = "Cached WMS"
+        _region = "Test"
+        _icon = "I"
+        _resolution = 1.0
+        _dataset = "test-cached-wms"
+        _extents = [(1.0, -1.0, 1.0, -1.0)]
+        _url = "https://example.invalid/wms"
+        _max_retries = 1
+
+        def get_wms_parameters(self, tile: tuple[float, float, float, float]) -> dict:
+            return {}
+
+    tile = (0.0, 0.0, 1.0, 1.0)
+    cached_tile_path = tmp_path / "0.0_0.0_1.0_1.0.tif"
+    cached_tile_path.write_bytes(b"")
+
+    provider = CachedWMSImageryProvider(
+        coordinates=(0.0, 0.0),
+        width_m=1000,
+        height_m=1000,
+        directory=str(tmp_path),
+    )
+    calls = 0
+
+    def fetcher(_tile: tuple[float, float, float, float]) -> bytes:
+        nonlocal calls
+        calls += 1
+        return _make_rgb_tiff_bytes()
+
+    files = provider.download_tiles_with_fetcher([tile], str(tmp_path), fetcher)
+
+    assert calls == 1
+    assert files == [str(cached_tile_path)]
+    with rasterio.open(files[0]) as dataset:
+        assert dataset.count == 3
+
+
 def test_european_imagery_providers_are_registered():
     expected = {
         "austria_basemap_orthofoto": AustriaBasemapOrthophotoImageryProvider,
@@ -395,6 +493,7 @@ def test_copernicus_wms_tile_size_matches_advertised_resolution(tmp_path: Path):
     params = provider.get_wms_parameters((100.0, 200.0, 1100.0, 1200.0))
 
     assert params["size"] == (500, 500)
+    assert provider._wms_version == "1.1.1"
     assert provider._tile_file_name((100.0, 200.0, 1100.0, 1200.0)).endswith("_500px.tif")
 
 

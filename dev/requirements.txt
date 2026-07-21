@@ -5,6 +5,7 @@ pydantic
 tqdm
 owslib
 pyproj
+pillow
 mypy
 pylint
 types-requests

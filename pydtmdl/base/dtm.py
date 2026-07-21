@@ -1114,6 +1114,24 @@ class DTMProvider(ABC):
         """
         all_tif_files = []
 
+        def read_tile_bytes(output: Any) -> bytes:
+            data = output.read() if hasattr(output, "read") else output
+            if isinstance(data, str):
+                data = data.encode()
+            if not isinstance(data, (bytes, bytearray, memoryview)):
+                raise ValueError(f"Tile fetcher returned unsupported data type: {type(data).__name__}")
+            tile_bytes = bytes(data)
+            if not tile_bytes:
+                raise ValueError("Tile response was empty.")
+            return tile_bytes
+
+        def validate_tile_file(path: str) -> None:
+            if os.path.getsize(path) <= 0:
+                raise ValueError("Tile file is empty.")
+            with rasterio.open(path) as dataset:
+                if dataset.width <= 0 or dataset.height <= 0 or dataset.count <= 0:
+                    raise ValueError("Tile raster has invalid dimensions.")
+
         def default_file_name(tile: tuple[float, float, float, float]) -> str:
             return "_".join(map(str, tile)) + ".tif"
 
@@ -1126,10 +1144,26 @@ class DTMProvider(ABC):
             file_name = file_name_generator(tile)
             file_path = os.path.join(output_path, file_name)
 
-            if not os.path.exists(file_path):
-                # Retry logic
-                success = False
+            success = False
+            if os.path.exists(file_path):
+                try:
+                    validate_tile_file(file_path)
+                    self.logger.debug("File already exists: %s", file_name)
+                    success = True
+                except Exception as e:
+                    self.logger.warning(
+                        "Cached tile is invalid and will be redownloaded: %s (%s)",
+                        file_path,
+                        e,
+                    )
+                    try:
+                        os.remove(file_path)
+                    except OSError:
+                        pass
+
+            if not success:
                 for attempt in range(self._max_retries):
+                    tmp_file_path = f"{file_path}.{os.getpid()}.{attempt}.tmp"
                     try:
                         self.logger.debug(
                             "Fetching tile: %s (attempt %d/%d)",
@@ -1138,12 +1172,21 @@ class DTMProvider(ABC):
                             self._max_retries,
                         )
                         output = data_fetcher(tile)
-                        with open(file_path, "wb") as f:
-                            f.write(output.read() if hasattr(output, "read") else output)
+                        tile_bytes = read_tile_bytes(output)
+                        with open(tmp_file_path, "wb") as f:
+                            f.write(tile_bytes)
+                        validate_tile_file(tmp_file_path)
+                        os.replace(tmp_file_path, file_path)
                         self.logger.debug("Tile downloaded successfully: %s", file_path)
                         success = True
                         break  # Success, exit retry loop
                     except Exception as e:
+                        try:
+                            if os.path.exists(tmp_file_path):
+                                os.remove(tmp_file_path)
+                        except OSError:
+                            pass
+
                         if attempt < self._max_retries - 1:
                             self.logger.warning(
                                 "Failed to download tile %s (attempt %d/%d): %s. Retrying in %d seconds...",
@@ -1162,26 +1205,24 @@ class DTMProvider(ABC):
                                 e,
                             )
 
-                if not success:
-                    failed_tiles += 1
-                    observed_tiles = successful_tiles + failed_tiles
-                    failed_ratio = failed_tiles / observed_tiles
-                    if (
-                        self._max_failed_tiles is not None
-                        and failed_tiles >= self._max_failed_tiles
-                        and failed_ratio >= self._max_failed_tile_ratio
-                    ):
-                        raise DownloadFailedError(
-                            "Aborting tile download after "
-                            f"{failed_tiles}/{observed_tiles} observed tiles failed "
-                            f"({failed_ratio:.0%}; threshold {self._max_failed_tiles} "
-                            f"failed tiles at {self._max_failed_tile_ratio:.0%}).",
-                            provider_code=self.code(),
-                            provider_name=self.name(),
-                        )
-                    continue  # Skip this tile if all retries failed
-            else:
-                self.logger.debug("File already exists: %s", file_name)
+            if not success:
+                failed_tiles += 1
+                observed_tiles = successful_tiles + failed_tiles
+                failed_ratio = failed_tiles / observed_tiles
+                if (
+                    self._max_failed_tiles is not None
+                    and failed_tiles >= self._max_failed_tiles
+                    and failed_ratio >= self._max_failed_tile_ratio
+                ):
+                    raise DownloadFailedError(
+                        "Aborting tile download after "
+                        f"{failed_tiles}/{observed_tiles} observed tiles failed "
+                        f"({failed_ratio:.0%}; threshold {self._max_failed_tiles} "
+                        f"failed tiles at {self._max_failed_tile_ratio:.0%}).",
+                        provider_code=self.code(),
+                        provider_name=self.name(),
+                    )
+                continue  # Skip this tile if all retries failed
 
             successful_tiles += 1
             all_tif_files.append(file_path)

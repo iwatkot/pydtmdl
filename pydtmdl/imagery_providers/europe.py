@@ -168,6 +168,7 @@ class CopernicusVHR2021ImageryProvider(EuropeanWMSImageryProvider):
         "https://copernicus.discomap.eea.europa.eu/arcgis/services/"
         "GioLand/VHR_2021_LAEA/ImageServer/WMSServer"
     )
+    _wms_version = "1.1.1"
     _source_crs = "EPSG:3035"
     _image_format = "image/tiff"
     _layer = "VHR_2021_LAEA"
