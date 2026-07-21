@@ -12,10 +12,11 @@ import rasterio
 import requests
 from pydantic import Field
 from pyproj import Transformer
-from rasterio.windows import from_bounds
+from rasterio.windows import Window
 
 from pydtmdl.base.dtm import OutsideCoverageError
 from pydtmdl.base.imagery import ImageryProvider, ImageryProviderSettings
+from pydtmdl.base.raster_windows import window_from_bounds_clamped
 
 
 def _default_naip_date_to() -> str:
@@ -48,6 +49,7 @@ class NAIPImageryProvider(ImageryProvider):
     _dataset = "naip"
     _settings = NAIPImagerySettings
     _extents = [(49.5, 24.0, -66.0, -125.0)]
+    _cache_version = 3
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -174,8 +176,10 @@ class NAIPImageryProvider(ImageryProvider):
                 return None
 
             bounds = self._project_bbox_to_dataset(src)
-            window = from_bounds(*bounds, src.transform)
-            window = window.round_offsets().round_lengths()
+            window = window_from_bounds_clamped(src, bounds)
+            if window is None:
+                self.logger.debug("NAIP scene does not overlap ROI scene_id=%s", scene_id)
+                return None
 
             self.logger.debug(
                 "NAIP scene read scene_id=%s src_crs=%s window=%s",
@@ -184,37 +188,53 @@ class NAIPImageryProvider(ImageryProvider):
                 window,
             )
 
-            rgb = src.read((1, 2, 3), window=window, boundless=True)
-            validity = src.read_masks(1, window=window, boundless=True)
             transform = src.window_transform(window)
             metadata = src.meta.copy()
 
-        rgb = np.ma.array(rgb, mask=np.broadcast_to(validity == 0, rgb.shape))
+            metadata.update(
+                {
+                    "driver": "GTiff",
+                    "height": int(window.height),
+                    "width": int(window.width),
+                    "count": 3,
+                    "dtype": src.dtypes[0],
+                    "transform": transform,
+                    "nodata": 0,
+                    "tiled": True,
+                    "blockxsize": 256,
+                    "blockysize": 256,
+                    "compress": "deflate",
+                    "BIGTIFF": "IF_SAFER",
+                }
+            )
+            valid_pixels = 0
+            with rasterio.open(output_path, "w", **metadata) as dst:
+                for _, block_window in dst.block_windows(1):
+                    source_window = Window(
+                        window.col_off + block_window.col_off,
+                        window.row_off + block_window.row_off,
+                        block_window.width,
+                        block_window.height,
+                    )
+                    rgb = src.read((1, 2, 3), window=source_window)
+                    validity = src.read_masks(1, window=source_window)
+                    valid_pixels += int(np.count_nonzero(validity))
+                    rgb[:, validity == 0] = 0
+                    dst.write(rgb, window=block_window)
 
-        if rgb.size == 0 or (np.ma.isMaskedArray(rgb) and rgb.count() == 0):
+        if valid_pixels == 0:
             self.logger.debug("NAIP scene produced empty ROI scene_id=%s", scene_id)
+            try:
+                os.remove(output_path)
+            except FileNotFoundError:
+                pass
             return None
-
-        metadata.update(
-            {
-                "driver": "GTiff",
-                "height": rgb.shape[1],
-                "width": rgb.shape[2],
-                "count": 3,
-                "dtype": str(rgb.dtype),
-                "transform": transform,
-                "nodata": 0,
-                "compress": "deflate",
-            }
-        )
-        with rasterio.open(output_path, "w", **metadata) as dst:
-            dst.write(rgb.filled(0))
 
         self.logger.debug(
             "NAIP scene rendered scene_id=%s shape=%sx%s elapsed=%.2fs",
             scene_id,
-            rgb.shape[1],
-            rgb.shape[2],
+            int(window.height),
+            int(window.width),
             time.perf_counter() - started_at,
         )
 

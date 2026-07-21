@@ -16,6 +16,7 @@ from pydantic import BaseModel
 from pyproj import CRS, Transformer
 from rasterio.enums import Resampling
 from rasterio.warp import reproject
+from rasterio.windows import Window
 
 from pydtmdl.base.dtm import (
     DTMErrorDetails,
@@ -314,32 +315,84 @@ def _write_normalized_png(
                 dst.write(normalized, 1, window=window)
 
 
+_JPEG_PERCENTILE_SAMPLE_LIMIT_PER_BAND = 262_144
+
+
+def _jpeg_output_band_map(band_count: int) -> list[int]:
+    if band_count <= 0:
+        raise ValueError("Imagery source does not contain any raster bands.")
+    if band_count == 1:
+        return [0, 0, 0]
+    if band_count == 2:
+        return [0, 1, 1]
+    return [0, 1, 2]
+
+
+def _source_windows(src: rasterio.DatasetReader) -> list[Window]:
+    windows = [window for _, window in src.block_windows(1)]
+    return windows or [Window(0, 0, src.width, src.height)]
+
+
+def _sample_preview_percentiles(
+    source_path: str,
+    band_count: int,
+) -> list[tuple[float, float]]:
+    with rasterio.open(source_path) as src:
+        windows = _source_windows(src)
+        samples: list[list[np.ndarray]] = [[] for _ in range(band_count)]
+        sample_budget_per_window = max(
+            1,
+            _JPEG_PERCENTILE_SAMPLE_LIMIT_PER_BAND // max(1, len(windows)),
+        )
+
+        for window in windows:
+            for band_index in range(1, band_count + 1):
+                data = src.read(band_index, window=window, masked=True)
+                band = np.ma.masked_invalid(data)
+                if band.count() == 0:
+                    continue
+                values = band.compressed()
+                if values.size > sample_budget_per_window:
+                    values = values[:: math.ceil(values.size / sample_budget_per_window)]
+                samples[band_index - 1].append(np.asarray(values, dtype=np.float32))
+
+    levels: list[tuple[float, float]] = []
+    for band_samples in samples:
+        if not band_samples:
+            levels.append((0.0, 0.0))
+            continue
+        values = np.concatenate(band_samples)
+        low, high = np.percentile(values, [2, 98])
+        levels.append((float(low), float(high)))
+    return levels
+
+
+def _scale_preview_band(
+    band: np.ma.MaskedArray,
+    low: float,
+    high: float,
+) -> np.ndarray:
+    band = np.ma.masked_invalid(band)
+    if band.count() == 0 or math.isclose(low, high):
+        return np.zeros(band.shape, dtype=np.uint8)
+    filled = np.asarray(band.filled(low), dtype=np.float32)
+    scaled = ((filled - low) / (high - low)) * 255.0
+    return np.rint(np.clip(scaled, 0, 255)).astype(np.uint8)
+
+
 def _write_jpeg_preview(source_path: str, output_path: str, quality: int) -> None:
     output = Path(output_path)
     output.parent.mkdir(parents=True, exist_ok=True)
     with rasterio.open(source_path) as src:
         band_count = min(src.count, 3)
-        data = src.read(list(range(1, band_count + 1)), masked=True)
-        if band_count == 1:
-            data = np.repeat(data, 3, axis=0)
-        elif band_count == 2:
-            data = np.concatenate([data, data[1:2]], axis=0)
-
-        if np.asarray(data).dtype == np.uint8:
-            rgb = np.asarray(np.ma.array(data).filled(0), dtype=np.uint8)
-        else:
-            rgb = np.zeros(data.shape, dtype=np.uint8)
-            for band_index in range(data.shape[0]):
-                band = np.ma.masked_invalid(data[band_index])
-                if band.count() == 0:
-                    continue
-                values = band.compressed()
-                low, high = np.percentile(values, [2, 98])
-                if math.isclose(float(low), float(high)):
-                    rgb[band_index] = 0
-                else:
-                    scaled = ((band.filled(low) - low) / (high - low)) * 255.0
-                    rgb[band_index] = np.rint(np.clip(scaled, 0, 255)).astype(np.uint8)
+        band_indexes = list(range(1, band_count + 1))
+        output_band_map = _jpeg_output_band_map(band_count)
+        source_dtype = np.dtype(src.dtypes[0])
+        percentiles = (
+            None
+            if source_dtype == np.dtype(np.uint8)
+            else _sample_preview_percentiles(source_path, band_count)
+        )
 
         with rasterio.open(
             output,
@@ -352,7 +405,21 @@ def _write_jpeg_preview(source_path: str, output_path: str, quality: int) -> Non
             photometric="YCBCR",
             quality=quality,
         ) as dst:
-            dst.write(rgb[:3])
+            for window in _source_windows(src):
+                data = src.read(band_indexes, window=window, masked=True)
+                if percentiles is None:
+                    source_rgb = np.asarray(np.ma.array(data).filled(0), dtype=np.uint8)
+                    rgb = source_rgb[output_band_map]
+                else:
+                    rgb = np.zeros((3, data.shape[1], data.shape[2]), dtype=np.uint8)
+                    for output_index, source_index in enumerate(output_band_map):
+                        low, high = percentiles[source_index]
+                        rgb[output_index] = _scale_preview_band(
+                            data[source_index],
+                            low,
+                            high,
+                        )
+                dst.write(rgb, window=window)
 
 
 def _provider_settings_payload(provider: DTMProvider) -> dict[str, Any]:
@@ -693,12 +760,16 @@ def _extract_project_imagery_with_provider(
     try:
         with rasterio.open(source_path) as src:
             band_indexes = list(range(1, min(src.count, 3) + 1))
+            source_dtype = np.dtype(src.dtypes[0])
+            preview_dtype = (
+                "float32" if np.issubdtype(source_dtype, np.floating) else str(source_dtype)
+            )
         _reproject_to_temp_tiff(
             source_path=source_path,
             output_path=preview_tiff,
             grid=grid,
             band_indexes=band_indexes,
-            dtype="float32",
+            dtype=preview_dtype,
             resampling=_resampling(resampling),
         )
         _write_jpeg_preview(preview_tiff, preview_jpg, jpeg_quality)

@@ -749,6 +749,48 @@ def test_naip_scene_cache_isolated_per_request(tmp_path: Path, monkeypatch):
     assert not np.ma.getmaskarray(second_result.data).all()
 
 
+def test_naip_scene_render_clamps_large_request_to_source_extent(tmp_path: Path, monkeypatch):
+    naip_path = tmp_path / "naip_clamped.tif"
+    _write_rgbir_raster(naip_path)
+
+    item = {
+        "id": "naip-clamped-scene",
+        "properties": {
+            "datetime": "2023-09-25T16:00:00Z",
+            "gsd": 0.3,
+        },
+        "assets": {
+            "image": {"href": str(naip_path)},
+        },
+    }
+
+    def fake_search_items(self, settings):
+        return [item]
+
+    monkeypatch.setattr(NAIPImageryProvider, "_search_items", fake_search_items)
+
+    provider = NAIPImageryProvider(
+        coordinates=(40.03, -105.22),
+        width_m=40000,
+        height_m=40000,
+        user_settings=NAIPImagerySettings(
+            date_from="2020-01-01",
+            date_to="2024-12-31",
+            max_items=1,
+        ),
+        directory=str(tmp_path),
+    )
+
+    tiles = provider.download_tiles()
+
+    assert len(tiles) == 1
+    with rasterio.open(naip_path) as source:
+        with rasterio.open(tiles[0]) as rendered:
+            assert rendered.width <= source.width
+            assert rendered.height <= source.height
+            assert rendered.count == 3
+
+
 def test_merge_geotiff_reprojects_mixed_crs_inputs(tmp_path: Path):
     tile_32630 = _write_single_band_raster(
         tmp_path / "tile_32630.tif",

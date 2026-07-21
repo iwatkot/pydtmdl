@@ -13,10 +13,11 @@ import requests
 from pydantic import Field
 from pyproj import Transformer
 from rasterio.enums import Resampling
-from rasterio.windows import from_bounds
+from rasterio.windows import Window, bounds as window_bounds
 
 from pydtmdl.base.dtm import OutsideCoverageError
 from pydtmdl.base.imagery import ImageryProvider, ImageryProviderSettings
+from pydtmdl.base.raster_windows import window_from_bounds_clamped
 
 
 def _default_date_to() -> str:
@@ -52,6 +53,7 @@ class Sentinel2L2AImageryProvider(ImageryProvider):
     _resolution = 10.0
     _dataset = "sentinel-2-l2a"
     _settings = Sentinel2L2AImagerySettings
+    _cache_version = 3
 
     _bad_scl_classes = {0, 1, 3, 8, 9, 10, 11}
 
@@ -271,8 +273,13 @@ class Sentinel2L2AImageryProvider(ImageryProvider):
 
         with rasterio.open(red_href) as red_src:
             bounds = self._project_bbox_to_dataset(red_src)
-            window = from_bounds(*bounds, red_src.transform)
-            window = window.round_offsets().round_lengths()
+            window = window_from_bounds_clamped(red_src, bounds)
+            if window is None:
+                self.logger.debug(
+                    "Sentinel-2 scene does not overlap ROI scene_id=%s",
+                    scene_id,
+                )
+                return None
 
             self.logger.debug(
                 "Sentinel-2 scene read scene_id=%s src_crs=%s window=%s",
@@ -281,72 +288,90 @@ class Sentinel2L2AImageryProvider(ImageryProvider):
                 window,
             )
 
-            red = red_src.read(1, window=window, boundless=True, masked=True)
             transform = red_src.window_transform(window)
             metadata = red_src.meta.copy()
 
-        if red.size == 0:
-            self.logger.debug("Sentinel-2 scene produced empty ROI scene_id=%s", scene_id)
-            return None
-
-        with rasterio.open(green_href) as green_src:
-            green = green_src.read(1, window=window, boundless=True, masked=True)
-        with rasterio.open(blue_href) as blue_src:
-            blue = blue_src.read(1, window=window, boundless=True, masked=True)
-        with rasterio.open(scl_href) as scl_src:
-            scl_bounds = self._project_bbox_to_dataset(scl_src)
-            scl_window = from_bounds(*scl_bounds, scl_src.transform)
-            scl_window = scl_window.round_offsets().round_lengths()
-            scl = scl_src.read(
-                1,
-                window=scl_window,
-                boundless=True,
-                masked=True,
-                out_shape=red.shape,
-                resampling=Resampling.nearest,
+            metadata.update(
+                {
+                    "driver": "GTiff",
+                    "height": int(window.height),
+                    "width": int(window.width),
+                    "count": 3,
+                    "dtype": "uint8",
+                    "transform": transform,
+                    "nodata": 0,
+                    "tiled": True,
+                    "blockxsize": 256,
+                    "blockysize": 256,
+                    "compress": "deflate",
+                    "BIGTIFF": "IF_SAFER",
+                }
             )
+            stretch = max(1, settings.reflectance_max - settings.reflectance_min)
+            valid_pixels = 0
+            with (
+                rasterio.open(green_href) as green_src,
+                rasterio.open(blue_href) as blue_src,
+                rasterio.open(scl_href) as scl_src,
+                rasterio.open(output_path, "w", **metadata) as dst,
+            ):
+                for _, block_window in dst.block_windows(1):
+                    source_window = Window(
+                        window.col_off + block_window.col_off,
+                        window.row_off + block_window.row_off,
+                        block_window.width,
+                        block_window.height,
+                    )
+                    red = red_src.read(1, window=source_window, masked=True)
+                    green = green_src.read(1, window=source_window, masked=True)
+                    blue = blue_src.read(1, window=source_window, masked=True)
+                    block_bounds = window_bounds(block_window, transform)
+                    scl_window = window_from_bounds_clamped(scl_src, block_bounds)
+                    if scl_window is None:
+                        scl = np.ma.masked_all(red.shape, dtype=np.uint8)
+                    else:
+                        scl = scl_src.read(
+                            1,
+                            window=scl_window,
+                            masked=True,
+                            out_shape=red.shape,
+                            resampling=Resampling.nearest,
+                        )
 
-        rgb = np.stack([red, green, blue]).astype(np.float32)
-        invalid_mask = (
-            np.ma.getmaskarray(red)
-            | np.ma.getmaskarray(green)
-            | np.ma.getmaskarray(blue)
-            | np.ma.getmaskarray(scl)
-            | np.isin(np.asarray(scl.filled(0), dtype=np.uint8), tuple(self._bad_scl_classes))
-        )
+                    rgb = np.stack([red, green, blue]).astype(np.float32)
+                    invalid_mask = (
+                        np.ma.getmaskarray(red)
+                        | np.ma.getmaskarray(green)
+                        | np.ma.getmaskarray(blue)
+                        | np.ma.getmaskarray(scl)
+                        | np.isin(
+                            np.asarray(scl.filled(0), dtype=np.uint8),
+                            tuple(self._bad_scl_classes),
+                        )
+                    )
 
-        stretch = max(1, settings.reflectance_max - settings.reflectance_min)
-        rgb = ((rgb - settings.reflectance_min) / stretch).astype(np.float32)
-        rgb = np.clip(rgb, 0.0, 1.0).astype(np.float32)
-        if settings.gamma > 0 and not np.isclose(settings.gamma, 1.0):
-            rgb = np.power(rgb, 1.0 / settings.gamma).astype(np.float32)
-        rgb = np.round(rgb * 255.0).astype(np.uint8)
-        rgb = np.ma.array(rgb, mask=np.broadcast_to(invalid_mask, rgb.shape))
+                    rgb = ((rgb - settings.reflectance_min) / stretch).astype(np.float32)
+                    rgb = np.clip(rgb, 0.0, 1.0).astype(np.float32)
+                    if settings.gamma > 0 and not np.isclose(settings.gamma, 1.0):
+                        rgb = np.power(rgb, 1.0 / settings.gamma).astype(np.float32)
+                    rgb = np.round(rgb * 255.0).astype(np.uint8)
+                    valid_pixels += int(np.count_nonzero(~invalid_mask))
+                    rgb[:, invalid_mask] = 0
+                    dst.write(rgb, window=block_window)
 
-        if rgb.count() == 0:
+        if valid_pixels == 0:
             self.logger.debug("Sentinel-2 scene masked out scene_id=%s", scene_id)
+            try:
+                os.remove(output_path)
+            except FileNotFoundError:
+                pass
             return None
-
-        metadata.update(
-            {
-                "driver": "GTiff",
-                "height": rgb.shape[1],
-                "width": rgb.shape[2],
-                "count": 3,
-                "dtype": "uint8",
-                "transform": transform,
-                "nodata": 0,
-                "compress": "deflate",
-            }
-        )
-        with rasterio.open(output_path, "w", **metadata) as dst:
-            dst.write(rgb.filled(0))
 
         self.logger.debug(
             "Sentinel-2 scene rendered scene_id=%s shape=%sx%s elapsed=%.2fs",
             scene_id,
-            rgb.shape[1],
-            rgb.shape[2],
+            int(window.height),
+            int(window.width),
             time.perf_counter() - started_at,
         )
 
